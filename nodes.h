@@ -1,6 +1,6 @@
 #include "token.h"
 
-typedef struct node {
+typedef struct NODE {
   int          type;
   struct node *left;
   struct node *right;
