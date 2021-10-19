@@ -1,7 +1,7 @@
 #include <stdio.h>
 #include <ctype.h>
-#include "nodes.h"
-#include "C.tab.h"
+#include "./lexer_parser/nodes.h"
+#include "./lexer_parser/C.tab.h"
 #include "interpreter.h"
 #include <string.h>
 
@@ -105,7 +105,7 @@ int main(int argc, char** argv)
     tree = ans;
     printf("parse finished with %p\n", tree);
     print_tree(tree);
-    printf(interpreter(tree));
+    interpreter(tree);
     printf("\n");
     return 0;
 }
