@@ -123,6 +123,7 @@ TOKEN *new_token(int type)
 TOKEN *make_string(char *s)
 {
     TOKEN *ans = new_token(STRING_LITERAL);
+    if (*s == 'L') s++;
     int len = strlen(s);
     ans->lexeme = (char*)calloc(1, len-1);
     strncpy(ans->lexeme, s+1, len-2);
@@ -131,8 +132,9 @@ TOKEN *make_string(char *s)
 
 TOKEN *make_int(char *s)
 {
-    int n = *s!='\'' ? atoi(s) : *(s+1);
     TOKEN *ans = new_token(CONSTANT);
+    if (*s == 'L') s++;
+    int n = *s!='\'' ? atoi(s) : *(s+1);
     ans->value = n;
     return ans;
 }
