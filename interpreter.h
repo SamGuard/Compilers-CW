@@ -21,7 +21,7 @@ typedef struct Frame {
     struct Frame *next;
 } Frame;
 
-void interpreter(NODE *tree);
+int interpreter(NODE *tree);
 Value *traverse(NODE*, Frame*);
 
 #endif

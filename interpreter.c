@@ -139,19 +139,7 @@ void applyArgsToParams(NODE *args, NODE *params, Frame *oldF, Frame *newF) {
             args = args->right;
             params = params->right;
         case '~':;
-            TOKEN *a = (TOKEN *)args->left;
-            int type = ((TOKEN *)params->left->left)->type;
-            Value *v;
-            if (a->type == CONSTANT) {
-                v = tokenToVal(a);
-            } else if (a->type == IDENTIFIER) {
-                v = retrieve(a, oldF);
-            } else {
-                perror("Invalid type in leaf");
-                return;
-            }
-
-            declare((TOKEN *)params->right->left, v, newF);
+            declare((TOKEN *)params->right->left, traverse(args, oldF), newF);
     }
 }
 
@@ -163,19 +151,22 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
             perror("Invalid symbol");
         case '+':
             z->i = x->i + y->i;
-            return z;
+            break;
         case '-':
             z->i = x->i - y->i;
-            return z;
+            break;
         case '*':
             z->i = x->i * y->i;
-            return z;
+            break;
         case '/':
             z->i = x->i / y->i;
-            return z;
+            break;
         case 'N':  // Negate
             z->i = -x->i;
     }
+    free(x);
+    free(y);
+    return z;
 }
 
 // x, y are the values to be compared, symbol is the comparison and tree is a
@@ -305,7 +296,7 @@ Value *traverse(NODE *tree, Frame *f) {
             if (t->type == CONSTANT) {
                 return tokenToVal(t);
             } else if (t->type == IDENTIFIER) {
-                return retrieve(t, f);
+                return copyValue(retrieve(t, f));
             } else {
                 perror("Invalid type in leaf");
             }
@@ -371,11 +362,13 @@ NODE *findMain(Frame *f) {
     }
 }
 
-void interpreter(NODE *tree) {
+int interpreter(NODE *tree) {
     Frame *f = allocFrame(NULL);
     f->b = (Binding *)malloc(sizeof(Binding));
     f->next = NULL;
     traverse(tree, f);
-
-    printf("Program exited with code: %d\n", callMain(findMain(f), f)->i);
+    int result = callMain(findMain(f), f)->i;
+    printf("Program exited with code: %d\n", result);
+    free(f);
+    return result;
 }
