@@ -2,23 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-
-typedef union Value {
-    int i;    // Int
-    char *s;  // String
-    NODE *f;  // Function
-} Value;
-
-typedef struct Binding {
-    Value *value;
-    TOKEN *name;
-    struct Binding *next;
-} Binding;
-
-typedef struct Frame {
-    Binding *b;
-    struct Frame *next;
-} Frame;
+#include <string.h>
 
 TOKEN *allocToken(Value *value, int type, TOKEN *next) {
     TOKEN *x = (TOKEN *)malloc(sizeof(TOKEN));
@@ -194,6 +178,36 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
     }
 }
 
+// x, y are the values to be compared, symbol is the comparison and tree is a
+// pointer to the if node
+Value *logic(Value *x, Value *y, int symbol) {
+    Value *z = allocValue(INT, 0, NULL, NULL);
+    switch (symbol) {
+    defualt:
+        perror("Invalid logical operation");
+        case '=':
+            if (x->i == y->i) {
+                z->i = 1;
+            }
+            return z;
+        case '!':
+            if (x->i != y->i) {
+                z->i = 1;
+            }
+            return z;
+        case '<':
+            if (x->i <= y->i) {
+                z->i = 1;
+            }
+            return z;
+        case '>':
+            if (x->i >= y->i) {
+                z->i = 1;
+            }
+            return z;
+    }
+}
+
 Value *traverse(NODE *tree, Frame *f) {
     printf("%c\n", tree->type);
     switch (tree->type) {
@@ -208,8 +222,14 @@ Value *traverse(NODE *tree, Frame *f) {
         }
         case ';':
             if (tree->right != NULL) {
-                traverse(tree->left, f);
-                return traverse(tree->right, f);
+                Value *lResult, *rResult;
+
+                if (tree->left != NULL) lResult = traverse(tree->left, f);
+                rResult = traverse(tree->right, f);
+                if (tree->left != NULL && tree->left->type == RETURN) {
+                    return lResult;
+                }
+                return rResult;
             } else {
                 return traverse(tree->left, f);
             }
@@ -243,6 +263,43 @@ Value *traverse(NODE *tree, Frame *f) {
             return arithmetic(traverse(tree->left, f), traverse(tree->right, f),
                               '/');
 
+        case IF: {
+            Value *res = traverse(tree->left, f);
+            if (res->i == 0) {
+                if (tree->right->type == ELSE) {
+                    Frame *newFrame = allocFrame(f);
+                    Value* res = traverse(tree->right->right, newFrame);
+                    free(newFrame);
+                    f->next = NULL;
+                    return res;
+                }
+                return NULL;
+            } else {
+                Frame *newFrame = allocFrame(f);
+                Value *res;
+                if (tree->right->type == ELSE) {
+                    res = traverse(tree->right->left, newFrame);
+                } else {
+                    res = traverse(tree->right, newFrame);
+                }
+                free(newFrame);
+                f->next = NULL;
+                return res;
+            }
+        }
+        case EQ_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '=');
+        case NE_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '!');
+        case LE_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '<');
+        case GE_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '>');
+
         case LEAF: {
             TOKEN *t = (TOKEN *)tree->left;
             if (t->type == CONSTANT) {
@@ -256,9 +313,9 @@ Value *traverse(NODE *tree, Frame *f) {
         case APPLY: {
             Frame *newFrame = allocFrame(f);
             NODE *func = retrieve((TOKEN *)tree->left->left, f)->f;
-            applyArgsToParams(tree->right, func->left->right->right, f, newFrame);
-            Value *v =
-                traverse(func->right, newFrame);
+            applyArgsToParams(tree->right, func->left->right->right, f,
+                              newFrame);
+            Value *v = traverse(func->right, newFrame);
             free(newFrame);
             return v;
         }
@@ -296,7 +353,7 @@ void printFrame(Frame *f) {
     }
 }
 
-Value *callFunction(NODE *tree, Frame *f) {
+Value *callMain(NODE *tree, Frame *f) {
     Frame *newFrame = allocFrame(f);
     Value *v = traverse(tree->right, newFrame);
     printFrame(newFrame);
@@ -320,5 +377,5 @@ void interpreter(NODE *tree) {
     f->next = NULL;
     traverse(tree, f);
 
-    printf("Program exited with code: %d\n", callFunction(findMain(f), f)->i);
+    printf("Program exited with code: %d\n", callMain(findMain(f), f)->i);
 }
