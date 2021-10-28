@@ -105,7 +105,7 @@
 #include "nodes.h"
 #define YYSTYPE NODE*
 #define YYDEBUG 1
-#define YYERROR_VERBOSE 1
+#define YYERROR_VERBOSE 0
 extern TOKEN *int_token, *void_token, *function_token, *lasttok;
 NODE *ans;
 

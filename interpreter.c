@@ -4,6 +4,9 @@
 #include <stdlib.h>
 #include <string.h>
 
+Frame *globalFrame;
+int returning, breaking;
+
 TOKEN *allocToken(Value *value, int type, TOKEN *next) {
     TOKEN *x = (TOKEN *)malloc(sizeof(TOKEN));
     if (x == (void *)0) {
@@ -163,6 +166,9 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
             break;
         case 'N':  // Negate
             z->i = -x->i;
+        case '%':
+            z->i = x->i % y->i;
+            break;
     }
     free(x);
     free(y);
@@ -172,35 +178,44 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
 // x, y are the values to be compared, symbol is the comparison and tree is a
 // pointer to the if node
 Value *logic(Value *x, Value *y, int symbol) {
-    Value *z = allocValue(INT, 0, NULL, NULL);
+    Value *z = allocValue(INT, FALSE, NULL, NULL);
     switch (symbol) {
     defualt:
         perror("Invalid logical operation");
         case '=':
             if (x->i == y->i) {
-                z->i = 1;
+                z->i = TRUE;
             }
             return z;
         case '!':
             if (x->i != y->i) {
-                z->i = 1;
+                z->i = TRUE;
             }
             return z;
-        case '<':
+        case ',':
             if (x->i <= y->i) {
-                z->i = 1;
+                z->i = TRUE;
+            }
+            return z;
+        case '.':
+            if (x->i >= y->i) {
+                z->i = TRUE;
+            }
+        case '<':
+            if (x->i < y->i) {
+                z->i = TRUE;
             }
             return z;
         case '>':
-            if (x->i >= y->i) {
-                z->i = 1;
+            if (x->i > y->i) {
+                z->i = TRUE;
             }
             return z;
     }
 }
 
 Value *traverse(NODE *tree, Frame *f) {
-    printf("%c\n", tree->type);
+    //printf("%c\n", tree->type);
     switch (tree->type) {
         default:
             perror("unexpected type");
@@ -216,6 +231,7 @@ Value *traverse(NODE *tree, Frame *f) {
                 Value *lResult, *rResult;
 
                 if (tree->left != NULL) lResult = traverse(tree->left, f);
+                if (returning || breaking) return lResult;
                 rResult = traverse(tree->right, f);
                 if (tree->left != NULL && tree->left->type == RETURN) {
                     return lResult;
@@ -253,13 +269,34 @@ Value *traverse(NODE *tree, Frame *f) {
         case '/':
             return arithmetic(traverse(tree->left, f), traverse(tree->right, f),
                               '/');
+        case '%':
+            return arithmetic(traverse(tree->left, f), traverse(tree->right, f),
+                              '%');
+        case '<':
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '<');
+        case '>':
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '>');
+        case EQ_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '=');
+        case NE_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '!');
+        case LE_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         ',');
+        case GE_OP:
+            return logic(traverse(tree->left, f), traverse(tree->right, f),
+                         '.');
 
         case IF: {
             Value *res = traverse(tree->left, f);
-            if (res->i == 0) {
+            if (res->i == FALSE) {
                 if (tree->right->type == ELSE) {
                     Frame *newFrame = allocFrame(f);
-                    Value* res = traverse(tree->right->right, newFrame);
+                    Value *res = traverse(tree->right->right, newFrame);
                     free(newFrame);
                     f->next = NULL;
                     return res;
@@ -278,18 +315,21 @@ Value *traverse(NODE *tree, Frame *f) {
                 return res;
             }
         }
-        case EQ_OP:
-            return logic(traverse(tree->left, f), traverse(tree->right, f),
-                         '=');
-        case NE_OP:
-            return logic(traverse(tree->left, f), traverse(tree->right, f),
-                         '!');
-        case LE_OP:
-            return logic(traverse(tree->left, f), traverse(tree->right, f),
-                         '<');
-        case GE_OP:
-            return logic(traverse(tree->left, f), traverse(tree->right, f),
-                         '>');
+
+        case WHILE: {
+            Frame *newFrame = allocFrame(f);
+            Value *res;
+            while (traverse(tree->left, newFrame)->i == TRUE) {
+                res = traverse(tree->right, newFrame);
+                if (breaking || returning) {
+                    breaking = FALSE;
+                    return res;
+                }
+                free(newFrame);
+                newFrame = allocFrame(f);
+            }
+            return NULL;
+        }
 
         case LEAF: {
             TOKEN *t = (TOKEN *)tree->left;
@@ -302,16 +342,24 @@ Value *traverse(NODE *tree, Frame *f) {
             }
         }
         case APPLY: {
-            Frame *newFrame = allocFrame(f);
+            Frame *newFrame = allocFrame(globalFrame);
             NODE *func = retrieve((TOKEN *)tree->left->left, f)->f;
             applyArgsToParams(tree->right, func->left->right->right, f,
                               newFrame);
             Value *v = traverse(func->right, newFrame);
+            returning = FALSE;
+            breaking = FALSE;
             free(newFrame);
             return v;
         }
-        case RETURN:
-            return traverse(tree->left, f);
+        case BREAK:
+            breaking = TRUE;
+            return NULL;
+        case RETURN:{
+            Value *v = traverse(tree->left, f);
+            returning = TRUE;
+            return v;
+        }
     }
 }
 
@@ -363,12 +411,13 @@ NODE *findMain(Frame *f) {
 }
 
 int interpreter(NODE *tree) {
-    Frame *f = allocFrame(NULL);
-    f->b = (Binding *)malloc(sizeof(Binding));
-    f->next = NULL;
-    traverse(tree, f);
-    int result = callMain(findMain(f), f)->i;
+    globalFrame = allocFrame(NULL);
+    globalFrame->b = (Binding *)malloc(sizeof(Binding));
+    globalFrame->next = NULL;
+    returning = 0; breaking = 0;
+    traverse(tree, globalFrame);
+    int result = callMain(findMain(globalFrame), globalFrame)->i;
     printf("Program exited with code: %d\n", result);
-    free(f);
+    free(globalFrame);
     return result;
 }

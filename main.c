@@ -105,6 +105,7 @@ int main(int argc, char** argv)
     tree = ans;
     printf("parse finished with %p\n", tree);
     print_tree(tree);
-  
-    return interpreter(tree);
+    
+    interpreter(tree);
+    return 0;
 }
