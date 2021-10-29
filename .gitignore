@@ -2,4 +2,5 @@
 **.exe
 run.sh
 main
-
+*.exe
+*.exe.*
