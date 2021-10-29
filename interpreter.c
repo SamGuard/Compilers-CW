@@ -37,6 +37,17 @@ Frame *allocFrame(Frame *prev) {
     return f;
 }
 
+void freeFrame(Frame *f) {
+    Binding *b = f->b;
+    Binding *next;
+    while (b != NULL) {
+        next = b->next;
+        free(b);
+        b = next;
+    }
+    free(f);
+}
+
 Value *allocValue(int type, int i, char *s, NODE *func) {
     Value *v = (Value *)malloc(sizeof(Value));
     if (v == (void *)0) {
@@ -115,7 +126,7 @@ void declare(TOKEN *ident, Value *value, Frame *f) {
 
 void assign(TOKEN *ident, Value *x, Frame *f) {
     Binding *b = findBinding(ident, f);
-
+    free(b->value);
     b->value = x;
 }
 
@@ -186,17 +197,17 @@ Value *logic(Value *x, Value *y, int symbol) {
             if (x->i == y->i) {
                 z->i = TRUE;
             }
-            return z;
+            break;
         case '!':
             if (x->i != y->i) {
                 z->i = TRUE;
             }
-            return z;
+            break;
         case ',':
             if (x->i <= y->i) {
                 z->i = TRUE;
             }
-            return z;
+            break;
         case '.':
             if (x->i >= y->i) {
                 z->i = TRUE;
@@ -205,17 +216,21 @@ Value *logic(Value *x, Value *y, int symbol) {
             if (x->i < y->i) {
                 z->i = TRUE;
             }
-            return z;
+            break;
         case '>':
             if (x->i > y->i) {
                 z->i = TRUE;
             }
-            return z;
+            break;
     }
+
+    free(x);
+    free(y);
+    return z;
 }
 
 Value *traverse(NODE *tree, Frame *f) {
-    //printf("%c\n", tree->type);
+    // printf("%c\n", tree->type);
     switch (tree->type) {
         default:
             perror("unexpected type");
@@ -234,8 +249,10 @@ Value *traverse(NODE *tree, Frame *f) {
                 if (returning || breaking) return lResult;
                 rResult = traverse(tree->right, f);
                 if (tree->left != NULL && tree->left->type == RETURN) {
+                    free(rResult);
                     return lResult;
                 }
+                free(lResult);
                 return rResult;
             } else {
                 return traverse(tree->left, f);
@@ -244,14 +261,14 @@ Value *traverse(NODE *tree, Frame *f) {
             if (tree->left->type == LEAF) {
                 if (tree->right->type == '=') {
                     declare((TOKEN *)tree->right->left->left, NULL, f);
-                    traverse(tree->right, f);
+                    free(traverse(tree->right, f));
                 } else {
                     declare((TOKEN *)tree->right->left, NULL, f);
                 }
                 return NULL;
             } else {
-                traverse(tree->left, f);
-                traverse(tree->right, f);
+                free(traverse(tree->left, f));
+                free(traverse(tree->right, f));
                 return NULL;
             }
         case '=':
@@ -294,15 +311,17 @@ Value *traverse(NODE *tree, Frame *f) {
         case IF: {
             Value *res = traverse(tree->left, f);
             if (res->i == FALSE) {
+                free(res);
                 if (tree->right->type == ELSE) {
                     Frame *newFrame = allocFrame(f);
                     Value *res = traverse(tree->right->right, newFrame);
-                    free(newFrame);
+                    freeFrame(newFrame);
                     f->next = NULL;
                     return res;
                 }
                 return NULL;
             } else {
+                free(res);
                 Frame *newFrame = allocFrame(f);
                 Value *res;
                 if (tree->right->type == ELSE) {
@@ -310,7 +329,7 @@ Value *traverse(NODE *tree, Frame *f) {
                 } else {
                     res = traverse(tree->right, newFrame);
                 }
-                free(newFrame);
+                freeFrame(newFrame);
                 f->next = NULL;
                 return res;
             }
@@ -319,15 +338,21 @@ Value *traverse(NODE *tree, Frame *f) {
         case WHILE: {
             Frame *newFrame = allocFrame(f);
             Value *res;
-            while (traverse(tree->left, newFrame)->i == TRUE) {
+            Value *condition;
+            while ((condition = traverse(tree->left, newFrame))->i == TRUE) {
+                free(condition);
                 res = traverse(tree->right, newFrame);
                 if (breaking || returning) {
+                    freeFrame(newFrame);
                     breaking = FALSE;
                     return res;
                 }
-                free(newFrame);
+                freeFrame(newFrame);
+                free(res);
                 newFrame = allocFrame(f);
             }
+            free(condition);
+            freeFrame(newFrame);
             return NULL;
         }
 
@@ -349,13 +374,13 @@ Value *traverse(NODE *tree, Frame *f) {
             Value *v = traverse(func->right, newFrame);
             returning = FALSE;
             breaking = FALSE;
-            free(newFrame);
+            freeFrame(newFrame);
             return v;
         }
         case BREAK:
             breaking = TRUE;
             return NULL;
-        case RETURN:{
+        case RETURN: {
             Value *v = traverse(tree->left, f);
             returning = TRUE;
             return v;
@@ -396,7 +421,7 @@ Value *callMain(NODE *tree, Frame *f) {
     Frame *newFrame = allocFrame(f);
     Value *v = traverse(tree->right, newFrame);
     printFrame(newFrame);
-    free(newFrame);
+    freeFrame(newFrame);
     return v;
 }
 
@@ -414,10 +439,11 @@ int interpreter(NODE *tree) {
     globalFrame = allocFrame(NULL);
     globalFrame->b = (Binding *)malloc(sizeof(Binding));
     globalFrame->next = NULL;
-    returning = 0; breaking = 0;
+    returning = 0;
+    breaking = 0;
     traverse(tree, globalFrame);
     int result = callMain(findMain(globalFrame), globalFrame)->i;
     printf("Program exited with code: %d\n", result);
-    free(globalFrame);
+    freeFrame(globalFrame);
     return result;
 }
