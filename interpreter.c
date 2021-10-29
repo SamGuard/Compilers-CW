@@ -177,6 +177,7 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
             break;
         case 'N':  // Negate
             z->i = -x->i;
+            break;
         case '%':
             z->i = x->i % y->i;
             break;
@@ -410,7 +411,7 @@ void printFrame(Frame *f) {
         while (b != NULL) {
             if (b->name != NULL)
                 printf("%d %s = %d, ", b->name->type, b->name->lexeme,
-                       b->value->i);
+                       b->value != NULL ? b->value->i : 0 );
             b = b->next;
         }
         f = f->next;
