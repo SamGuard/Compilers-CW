@@ -1,4 +1,10 @@
+int add2(int x, int y, int z){
+  return add1(x) + add1(x);
+}
 
+int add1(int x){
+  return x + 1;
+}
 
 int add1(int x) { return x + 2; }
 

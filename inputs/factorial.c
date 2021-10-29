@@ -6,5 +6,7 @@ int factorial(int x) {
 }
 
 int main() {
+  int x;
+  readInt(x);
   return factorial(10);
 }
