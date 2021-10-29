@@ -1,6 +1,8 @@
 int main(){
   int x = 0;
-  int add1(int x){ return x + 1; }
+  int increm = 1;
+  int add1(int x){ return x + increm; };
+  
   while(x < 1000000){
     x = add1(x);
   }

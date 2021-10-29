@@ -5,7 +5,7 @@
 #include <string.h>
 
 Frame *globalFrame;
-int returning, breaking;
+int returning, breaking, isGlobalScope;
 
 TOKEN *allocToken(Value *value, int type, TOKEN *next) {
     TOKEN *x = (TOKEN *)malloc(sizeof(TOKEN));
@@ -48,7 +48,7 @@ void freeFrame(Frame *f) {
     free(f);
 }
 
-Value *allocValue(int type, int i, char *s, NODE *func) {
+Value *allocValue(int type, int i, char *s, Closure *func) {
     Value *v = (Value *)malloc(sizeof(Value));
     if (v == (void *)0) {
         perror("Cannot allocate memory");
@@ -230,6 +230,20 @@ Value *logic(Value *x, Value *y, int symbol) {
     return z;
 }
 
+Value *builtInFunc(NODE *tree, Frame *f){
+    char *funcName = ((TOKEN*)tree->left->left)->lexeme;
+    if(strcmp(funcName, (char*)"readInt") == 0){
+        NODE* currentNode = tree->right;
+        while(currentNode != NULL){
+            if(currentNode->type == ','){
+
+            }
+        }
+    }
+
+    return NULL;    
+}
+
 Value *traverse(NODE *tree, Frame *f) {
     // printf("%c\n", tree->type);
     switch (tree->type) {
@@ -238,7 +252,10 @@ Value *traverse(NODE *tree, Frame *f) {
         case 0:
             return arithmetic(traverse(tree->left, f), NULL, 'N');
         case 'D': {
-            Value *v = allocValue(FUNCTION, 0, NULL, tree);
+            Closure *c = (Closure *)malloc(sizeof(Closure));
+            c->f = tree;
+            c->prev = (isGlobalScope ? globalFrame : f);
+            Value *v = allocValue(FUNCTION, 0, NULL, c);
             declare((TOKEN *)tree->left->right->left->left, v, f);
             return NULL;
         }
@@ -368,15 +385,22 @@ Value *traverse(NODE *tree, Frame *f) {
             }
         }
         case APPLY: {
-            Frame *newFrame = allocFrame(globalFrame);
-            NODE *func = retrieve((TOKEN *)tree->left->left, f)->f;
-            applyArgsToParams(tree->right, func->left->right->right, f,
-                              newFrame);
-            Value *v = traverse(func->right, newFrame);
-            returning = FALSE;
-            breaking = FALSE;
-            freeFrame(newFrame);
-            return v;
+            Value *bValue = builtInFunc(
+                tree, f);  // Sees if this is trying to use a built in function
+            // If not built in return null pointer
+            if (bValue == NULL) {
+                Closure *func = retrieve((TOKEN *)tree->left->left, f)->f;
+                Frame *newFrame = allocFrame(func->prev);
+                applyArgsToParams(tree->right, func->f->left->right->right, f,
+                                  newFrame);
+                Value *v = traverse(func->f->right, newFrame);
+                returning = FALSE;
+                breaking = FALSE;
+                freeFrame(newFrame);
+                return v;
+            } else {
+                return bValue;
+            }
         }
         case BREAK:
             breaking = TRUE;
@@ -411,7 +435,7 @@ void printFrame(Frame *f) {
         while (b != NULL) {
             if (b->name != NULL)
                 printf("%d %s = %d, ", b->name->type, b->name->lexeme,
-                       b->value != NULL ? b->value->i : 0 );
+                       b->value != NULL ? b->value->i : 0);
             b = b->next;
         }
         f = f->next;
@@ -426,7 +450,7 @@ Value *callMain(NODE *tree, Frame *f) {
     return v;
 }
 
-NODE *findMain(Frame *f) {
+Closure *findMain(Frame *f) {
     Binding *b = f->b;
     while (b != NULL) {
         if (b->name != NULL && strcmp(b->name->lexeme, "main") == 0) {
@@ -443,7 +467,7 @@ int interpreter(NODE *tree) {
     returning = 0;
     breaking = 0;
     traverse(tree, globalFrame);
-    int result = callMain(findMain(globalFrame), globalFrame)->i;
+    int result = callMain(findMain(globalFrame)->f, globalFrame)->i;
     printf("Program exited with code: %d\n", result);
     freeFrame(globalFrame);
     return result;
