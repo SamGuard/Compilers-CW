@@ -3,6 +3,7 @@
 #include "./lexer_parser/nodes.h"
 #include "./lexer_parser/C.tab.h"
 #include "interpreter.h"
+#include "tac.h"
 #include <string.h>
 
 char *named(int t)

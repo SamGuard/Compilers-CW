@@ -24,7 +24,8 @@ class TestInterpreter:
             ["loop1.c", "1"],
             ["loop2.c", "20"],
             ["loop3.c", "2001"],
-            ["slp1.c", "-15"]
+            ["slp1.c", "-15"],
+            ["lexscope.c", "2"]
         ]
 
         for fileName in files:
