@@ -151,13 +151,13 @@ TOKEN *traverse(NODE *tree, tac *prev) {
             return t->dest;
         }
         case IF: {
-            tac *tok = arithmetic(tree->left, prev, EQ_OP);
+            TOKEN *tok = traverse(tree->left, prev);
 
             tac *branch = allocTac(NULL);
             tac *endIfLabel = allocLabel();
 
             branch->op = BRANCH_FALSE;
-            branch->src1 = tok->dest;
+            branch->src1 = tok;
             appendTac(&prev, branch);
 
             if (tree->right->type == ELSE) {
