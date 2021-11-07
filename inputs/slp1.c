@@ -1,9 +1,6 @@
 int main(void)
 {
-  int a = 14;
-  int b = 2;
-  int c;
-  a = a + 1;
-  c = (-a) * b + a;
-  return c;
+  int a = 14 + 2;
+  int b = 2 * a - a;
+  int c = 2 * a < b + 4;
 }

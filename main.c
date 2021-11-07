@@ -2,9 +2,17 @@
 #include <ctype.h>
 #include "./lexer_parser/nodes.h"
 #include "./lexer_parser/C.tab.h"
-#include "interpreter.h"
-#include "tac.h"
 #include <string.h>
+
+
+#define MODE 1
+
+#if (MODE == 0)
+#include "interpreter.h"
+#endif
+#if(MODE == 1)
+#include "tac.h"
+#endif
 
 char *named(int t)
 {
@@ -106,7 +114,8 @@ int main(int argc, char** argv)
     tree = ans;
     printf("parse finished with %p\n", tree);
     print_tree(tree);
-    
-    interpreter(tree);
+    //interpreter(tree);
+    toTac(tree);
+
     return 0;
 }
