@@ -3,7 +3,7 @@ import os
 import re
 
 #BINARY_PATH = "bin/mycc"
-COMMAND = "./main.exe"
+COMMAND = "./bin/interpreter.exe"
 
 
 class TestInterpreter:
@@ -24,7 +24,7 @@ class TestInterpreter:
             ["loop1.c", "1"],
             ["loop2.c", "20"],
             ["loop3.c", "2001"],
-            ["slp1.c", "-15"],
+            ["slp1.c", "0"],
             ["lexscope.c", "2"]
         ]
 
