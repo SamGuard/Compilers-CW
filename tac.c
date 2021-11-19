@@ -267,11 +267,12 @@ void printTac(tac *t) {
     }
 }
 
-void toTac(NODE *tree) {
-    tac head;
-    head.op = 'H';
-    head.dest = head.src1 = head.src2 = NULL;
-    head.next = NULL;
-    traverse(tree, &head);
-    printTac(&head);
+tac* toTac(NODE *tree) {
+    tac* head = (tac*)malloc(sizeof(tac));
+    head->op = 'H';
+    head->dest = head->src1 = head->src2 = NULL;
+    head->next = NULL;
+    traverse(tree, head);
+    printTac(head);
+    return head;
 }
