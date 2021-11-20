@@ -1,4 +1,4 @@
-#include "tac.h"
+#include "Tac.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -6,10 +6,10 @@
 
 int tempCounter = 0;
 int labelCounter = 0;
-TOKEN *traverse(NODE *tree, tac *prev);
+TOKEN *traverse(NODE *tree, Tac *prev);
 
-tac *allocTac(TOKEN *token) {
-    tac *t = (tac *)malloc(sizeof(tac));
+Tac *allocTac(TOKEN *token) {
+    Tac *t = (Tac *)malloc(sizeof(Tac));
     if (t == NULL) {
         perror("cannot allocate memory in newTac\n");
     }
@@ -18,8 +18,8 @@ tac *allocTac(TOKEN *token) {
     return t;
 }
 
-tac *allocTemp() {
-    tac *newTac = (tac *)malloc(sizeof(tac));
+Tac *allocTemp() {
+    Tac *newTac = (Tac *)malloc(sizeof(Tac));
     TOKEN *newTok = (TOKEN *)malloc(sizeof(TOKEN));
     if (newTac == NULL || newTok == NULL) {
         perror("cannot allocate memory in newTac\n");
@@ -36,8 +36,8 @@ tac *allocTemp() {
     return newTac;
 }
 
-tac *allocLabel() {
-    tac *newTac = (tac *)malloc(sizeof(tac));
+Tac *allocLabel() {
+    Tac *newTac = (Tac *)malloc(sizeof(Tac));
     TOKEN *newTok = (TOKEN *)malloc(sizeof(TOKEN));
     if (newTac == NULL || newTok == NULL) {
         perror("cannot allocate memory in newTac\n");
@@ -55,19 +55,19 @@ tac *allocLabel() {
     return newTac;
 }
 
-void moveToFront(tac **t) {
+void moveToFront(Tac **t) {
     while ((*t)->next != NULL) {
         *t = (*t)->next;
     }
 }
 
-void appendTac(tac **prev, tac *t) {
+void appendTac(Tac **prev, Tac *t) {
     moveToFront(prev);
     (*prev)->next = t;
 }
 
-tac *arithmetic(NODE *tree, tac *prev, int op) {
-    tac *t = allocTemp();
+Tac *arithmetic(NODE *tree, Tac *prev, int op) {
+    Tac *t = allocTemp();
     t->op = op;
     t->src1 = traverse(tree->left, prev);
     t->src2 = traverse(tree->right, prev);
@@ -75,7 +75,7 @@ tac *arithmetic(NODE *tree, tac *prev, int op) {
     return t;
 }
 
-TOKEN *traverse(NODE *tree, tac *prev) {
+TOKEN *traverse(NODE *tree, Tac *prev) {
     printf("%c\n", tree->type);
     switch (tree->type) {
         default:
@@ -89,44 +89,48 @@ TOKEN *traverse(NODE *tree, tac *prev) {
             traverse(tree->left, prev);
             traverse(tree->right, prev);
             return 0;
-        case '~':
+        case '~': {
+            Tac *t = allocTac((TOKEN *)tree->right->left->left);
+            t->op = '~';
+            appendTac(&prev, t);
             traverse(tree->right, prev);
             return 0;
+        }
         case '=': {
-            tac *t = allocTac((TOKEN *)tree->left->left);
+            Tac *t = allocTac((TOKEN *)tree->left->left);
             t->op = '=';
             t->src1 = traverse(tree->right, prev);
             appendTac(&prev, t);
             return t->dest;
         }
         case '+': {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
 
         break;
         case '-': {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         } break;
         case '*': {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case '/': {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case '%': {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case '<': {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case '>': {
-            tac *t = allocTemp();
+            Tac *t = allocTemp();
             t->op = LE_OP;
             t->src2 = traverse(tree->left, prev);
             t->src1 = traverse(tree->right, prev);
@@ -134,38 +138,38 @@ TOKEN *traverse(NODE *tree, tac *prev) {
             return t->dest;
         }
         case EQ_OP: {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
 
         case NE_OP: {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case LE_OP: {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case GE_OP: {
-            tac *t = arithmetic(tree, prev, tree->type);
+            Tac *t = arithmetic(tree, prev, tree->type);
             return t->dest;
         }
         case IF: {
             TOKEN *tok = traverse(tree->left, prev);
 
-            tac *branch = allocTac(NULL);
-            tac *endIfLabel = allocLabel();
+            Tac *branch = allocTac(NULL);
+            Tac *endIfLabel = allocLabel();
 
             branch->op = BRANCH_FALSE;
             branch->src1 = tok;
             appendTac(&prev, branch);
 
             if (tree->right->type == ELSE) {
-                tac *elseLabel = allocLabel();
+                Tac *elseLabel = allocLabel();
                 branch->dest = elseLabel->dest;
 
                 traverse(tree->right->left, prev);
-                tac *endIfBranch = allocTac(NULL);
+                Tac *endIfBranch = allocTac(NULL);
                 endIfBranch->op = BRANCH;
                 endIfBranch->dest = endIfLabel->dest;
                 appendTac(&prev, endIfBranch);
@@ -193,7 +197,7 @@ TOKEN *traverse(NODE *tree, tac *prev) {
 }
 
 void printOP(int op) {
-    if(op < 256){
+    if (op < 256) {
         printf("%c", op);
         return;
     }
@@ -201,7 +205,7 @@ void printOP(int op) {
         case EQ_OP:
             printf("==");
             return;
-        case NE_OP: 
+        case NE_OP:
             printf("!=");
             return;
         case LE_OP:
@@ -233,14 +237,14 @@ void printToken(TOKEN *t) {
     printf("%s", t->lexeme);
 }
 
-void printTac(tac *t) {
+void printTac(Tac *t) {
     while (t != NULL) {
         if (t->op == 'H') {
             t = t->next;
             continue;
         }
-        if(t->op == BRANCH){
-             printf("BRANCH ");
+        if (t->op == BRANCH) {
+            printf("BRANCH ");
             printToken(t->dest);
         } else if (t->op == BRANCH_FALSE || t->op == BRANCH_TRUE) {
             printf("BRANCH ");
@@ -253,6 +257,8 @@ void printTac(tac *t) {
         } else if (t->op == LABEL) {
             printToken(t->dest);
             printf(":");
+        } else if (t->op == '~'){
+            printf("~ %s", t->dest->lexeme);
         } else {
             printToken(t->dest);
             printf("=");
@@ -267,8 +273,8 @@ void printTac(tac *t) {
     }
 }
 
-tac* toTac(NODE *tree) {
-    tac* head = (tac*)malloc(sizeof(tac));
+Tac *toTac(NODE *tree) {
+    Tac *head = (Tac *)malloc(sizeof(Tac));
     head->op = 'H';
     head->dest = head->src1 = head->src2 = NULL;
     head->next = NULL;

@@ -2,13 +2,13 @@
 #define TAC_H
 #include "./traverseStructures.h"
 
-typedef struct TAC {
+typedef struct Tac {
     int op;
     TOKEN *src1;
     TOKEN *src2;
     TOKEN *dest;
-    struct TAC *next;
-} tac;
+    struct Tac *next;
+} Tac;
 
-tac *toTac(NODE *tree);
+Tac *toTac(NODE *tree);
 #endif

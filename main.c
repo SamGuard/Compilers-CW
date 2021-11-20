@@ -5,7 +5,7 @@
 #include "./lexer_parser/C.tab.h"
 #include "./lexer_parser/nodes.h"
 
-#define IS_INTERPRETER 1
+#define IS_INTERPRETER 0
 
 #if (IS_INTERPRETER == 1)
 #include "interpreter.h"
@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
 #if (IS_INTERPRETER == 1)
     interpreter(tree);
 #else
-    tac *tacTree = toTac(tree);
+    Tac *tacTree = toTac(tree);
     toMachineCode(tacTree);
 #endif
     return 0;
