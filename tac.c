@@ -8,6 +8,17 @@ int tempCounter = 0;
 int labelCounter = 0;
 TOKEN *traverse(NODE *tree, Tac *prev);
 
+void moveToFront(Tac **t) {
+    while ((*t)->next != NULL) {
+        *t = (*t)->next;
+    }
+}
+
+void appendTac(Tac **prev, Tac *t) {
+    moveToFront(prev);
+    (*prev)->next = t;
+}
+
 Tac *allocTac(TOKEN *token) {
     Tac *t = (Tac *)malloc(sizeof(Tac));
     if (t == NULL) {
@@ -18,7 +29,7 @@ Tac *allocTac(TOKEN *token) {
     return t;
 }
 
-Tac *allocTemp() {
+Tac *allocTemp(Tac **tac) {
     Tac *newTac = (Tac *)malloc(sizeof(Tac));
     TOKEN *newTok = (TOKEN *)malloc(sizeof(TOKEN));
     if (newTac == NULL || newTok == NULL) {
@@ -33,6 +44,13 @@ Tac *allocTemp() {
     newTac->next = NULL;
 
     tempCounter++;
+
+    Tac *declareIns = (Tac *)malloc(sizeof(Tac));
+    declareIns->next = NULL;
+    declareIns->dest = newTok;
+    declareIns->op = '~';
+
+    appendTac(tac, declareIns);
     return newTac;
 }
 
@@ -55,19 +73,8 @@ Tac *allocLabel() {
     return newTac;
 }
 
-void moveToFront(Tac **t) {
-    while ((*t)->next != NULL) {
-        *t = (*t)->next;
-    }
-}
-
-void appendTac(Tac **prev, Tac *t) {
-    moveToFront(prev);
-    (*prev)->next = t;
-}
-
 Tac *arithmetic(NODE *tree, Tac *prev, int op) {
-    Tac *t = allocTemp();
+    Tac *t = allocTemp(&prev);
     t->op = op;
     t->src1 = traverse(tree->left, prev);
     t->src2 = traverse(tree->right, prev);
@@ -130,7 +137,7 @@ TOKEN *traverse(NODE *tree, Tac *prev) {
             return t->dest;
         }
         case '>': {
-            Tac *t = allocTemp();
+            Tac *t = allocTemp(&prev);
             t->op = LE_OP;
             t->src2 = traverse(tree->left, prev);
             t->src1 = traverse(tree->right, prev);
@@ -257,8 +264,12 @@ void printTac(Tac *t) {
         } else if (t->op == LABEL) {
             printToken(t->dest);
             printf(":");
-        } else if (t->op == '~'){
-            printf("~ %s", t->dest->lexeme);
+        } else if (t->op == '~') {
+            if(t->dest->lexeme[0] == '_'){
+                printf("~ %s%d", t->dest->lexeme, t->dest->value);
+            } else {
+                printf("~ %s", t->dest->lexeme);
+            }
         } else {
             printToken(t->dest);
             printf("=");

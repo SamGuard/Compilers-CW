@@ -5,6 +5,9 @@
 
 #define INS_LW 1
 #define INS_SW 2
+#define INS_ADD 3
+
+#define REG_T_START 8
 
 typedef struct Binding {
     TOKEN *var;
@@ -14,6 +17,7 @@ typedef struct Binding {
 
 typedef struct Frame {
     Binding *b;
+    unsigned int frameSize;
     struct Frame *next;
 } Frame;
 
@@ -26,6 +30,7 @@ typedef struct Instruction {
 typedef struct Block {
     unsigned int memSize;
     Inst *head, *tail;
+    Frame *frame;
     struct Block *next;
 } Block;
 
