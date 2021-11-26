@@ -80,28 +80,29 @@ void mathToInstruction(Block *b, int op, Tac* tac){
     addInstruction(b, INS_SW, regC, getVarLocation(tac->dest, b->frame), 0);
 }
 
-Block *traverseTac(Tac *tree, Block *block) {
-    while (tree != NULL) {
-        switch (tree->op) {
+Block *traverseTac(BasicBlock *graph, Block *block) {
+    Tac *tacList = graph->tac;
+    while (tacList != NULL) {
+        switch (tacList->op) {
             default:
                 perror("Invalid operation");
                 break;
             case 'H':
                 break;
             case '~': {
-                declare(tree->dest, block->frame);
+                declare(tacList->dest, block->frame);
                 break;
             }
             case '=': {
-                addInstruction(block, INS_SW, tree->src1->value,
-                               getVarLocation(tree->dest, block->frame), 0);
+                addInstruction(block, INS_SW, tacList->src1->value,
+                               getVarLocation(tacList->dest, block->frame), 0);
                 break;
             }
             case '+': {
-                mathToInstruction(block, '+', tree);
+                mathToInstruction(block, '+', tacList);
             }
         }
-        tree = tree->next;
+        tacList = tacList->next;
     }
     return block;
 }
@@ -134,7 +135,7 @@ void outputCode(Block *code) {
     }
 }
 
-void toMachineCode(Tac *tree) {
+void toMachineCode(BasicBlock *tree) {
     Block b;
     Frame f;
 

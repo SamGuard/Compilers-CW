@@ -115,7 +115,7 @@ int main(int argc, char **argv) {
 #if (IS_INTERPRETER == 1)
     interpreter(tree);
 #else
-    Tac *tacTree = toTac(tree);
+    BasicBlock *tacTree = toTac(tree);
     toMachineCode(tacTree);
 #endif
     return 0;

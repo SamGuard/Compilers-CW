@@ -10,5 +10,11 @@ typedef struct Tac {
     struct Tac *next;
 } Tac;
 
-Tac *toTac(NODE *tree);
+typedef struct BasicBlock{
+    unsigned int size;
+    Tac *tac, *tail;
+    struct BasicBlock *next;
+}BasicBlock;
+
+BasicBlock *toTac(NODE *tree);
 #endif

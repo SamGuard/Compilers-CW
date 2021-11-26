@@ -35,4 +35,4 @@ typedef struct Block {
 } Block;
 
 void outputCode(Block *code);
-void toMachineCode(Tac *tree);
+void toMachineCode(BasicBlock *tree);
