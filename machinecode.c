@@ -1,5 +1,18 @@
 #include "machinecode.h"
 
+char CODE_START[] = ".text\n.globl	main\nmain:\n";
+char CODE_END[]   = "li 10, $v0\nsyscall\n";
+
+Number *newNum(int addrMode, int value){
+    Number *n = (Number *)malloc(sizeof(Number));
+    if(n == NULL){
+        perror("Could allocate memory in newNum\n");
+    }
+
+    n->addrMode = addrMode;
+    n->value = value;
+}
+
 Binding *allocBinding(TOKEN *var, int memLoc) {
     Binding *newB = (Binding *)malloc(sizeof(Binding));
     if (newB == NULL) {
@@ -10,7 +23,7 @@ Binding *allocBinding(TOKEN *var, int memLoc) {
     newB->next = NULL;
 }
 
-void addInstruction(Block *b, int op, int arg1, int arg2, int arg3) {
+void addInstruction(Block *b, int op, Number *arg1, Number *arg2, Number *arg3) {
     Inst *i;
     if (b->head == NULL) {
         i = b->head = b->tail = (Inst *)malloc(sizeof(Inst));
@@ -94,7 +107,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 break;
             }
             case '=': {
-                addInstruction(block, INS_SW, tacList->src1->value,
+                addInstruction(block, INS_ADD, REG_T_START, 0, tacList->src1->value);
+                addInstruction(block, INS_SW, REG_T_START,
                                getVarLocation(tacList->dest, block->frame), 0);
                 break;
             }
@@ -109,8 +123,10 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
 
 // Pritning goes here
 void outputCode(Block *code) {
+    printf(CODE_START);
+
+
     while (code != NULL) {
-        printf("----------\n");
         Inst *i = code->head;
         printf("addi $sp, $sp, %d\n", -4 * code->frame->frameSize);
         while (i != NULL) {
@@ -133,6 +149,7 @@ void outputCode(Block *code) {
         printf("addi $sp, $sp, %d\n", 4 * code->frame->frameSize);
         code = code->next;
     }
+    printf(CODE_END);
 }
 
 void toMachineCode(BasicBlock *tree) {

@@ -1,5 +1,8 @@
+#ifndef MACHINECODE_H
+#define MACHINECODE_H
 #include <stdio.h>
 #include <stdlib.h>
+
 #include "./tac.h"
 #include "./traverseStructures.h"
 
@@ -8,6 +11,11 @@
 #define INS_ADD 3
 
 #define REG_T_START 8
+
+typedef struct Number {
+    int addrMode;
+    int value;
+} Number;
 
 typedef struct Binding {
     TOKEN *var;
@@ -23,7 +31,7 @@ typedef struct Frame {
 
 typedef struct Instruction {
     int op;
-    int arg1, arg2, arg3;
+    Number *arg1, *arg2, *arg3;
     struct Instruction *next;
 } Inst;
 
@@ -36,3 +44,4 @@ typedef struct Block {
 
 void outputCode(Block *code);
 void toMachineCode(BasicBlock *tree);
+#endif
