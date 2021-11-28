@@ -106,11 +106,11 @@ int main(int argc, char **argv) {
     NODE *tree;
     if (argc > 1 && strcmp(argv[1], "-d") == 0) yydebug = 1;
     init_symbtable();
-    printf("--C COMPILER\n");
+    //printf("--C COMPILER\n");
     yyparse();
     tree = ans;
-    printf("parse finished with %p\n", tree);
-    print_tree(tree);
+    //printf("parse finished with %p\n", tree);
+    //print_tree(tree);
 
 #if (IS_INTERPRETER == 1)
     interpreter(tree);

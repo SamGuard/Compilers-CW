@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#define VERBOSE
+
 int tempCounter = 0;
 int labelCounter = 0;
 TOKEN *traverse(NODE *tree, BasicBlock *block);
@@ -15,7 +17,7 @@ void moveToFrontTac(Tac **t) {
 }
 
 void appendTac(Tac **dest, Tac *src) {
-    if(*dest == NULL) {
+    if (*dest == NULL) {
         perror("Cannot append tac to null list");
         return;
     }
@@ -23,9 +25,8 @@ void appendTac(Tac **dest, Tac *src) {
     (*dest)->next = src;
 }
 
-
 void moveToFrontBlock(BasicBlock **dest) {
-    while((*dest)->next != NULL) {
+    while ((*dest)->next != NULL) {
         (*dest) = (*dest)->next;
     }
 }
@@ -97,7 +98,6 @@ BasicBlock *allocBasicBlock() {
         return NULL;
     }
 
-
     homeTac->op = 'H';
     homeTac->dest = homeTac->src1 = homeTac->src2 = NULL;
     homeTac->next = NULL;
@@ -119,7 +119,9 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
 
 TOKEN *traverse(NODE *tree, BasicBlock *block) {
     Tac *prev = block->tail;  // Previous tac to append onto
+#ifdef VERBOSE
     printf("%c\n", tree->type);
+#endif
     switch (tree->type) {
         default:
             perror("unexpected type");
@@ -134,8 +136,8 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             traverse(tree->right, block);
             return 0;
         case '~': {
-            Tac *t; 
-            if(tree->right->type == '='){
+            Tac *t;
+            if (tree->right->type == '=') {
                 t = allocTac((TOKEN *)tree->right->left->left);
             } else {
                 t = allocTac((TOKEN *)tree->right->left);
@@ -215,18 +217,17 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             branch->src1 = tok;
             appendTac(&prev, branch);
 
-            //Allocate block for if body
+            // Allocate block for if body
             BasicBlock *ifBlock = allocBasicBlock();
             BasicBlock *postIfBlock = allocBasicBlock();
 
             block->next = ifBlock;
 
             if (tree->right->type == ELSE) {
-                //Alloc block for else body
+                // Alloc block for else body
                 BasicBlock *elseBlock = allocBasicBlock();
                 ifBlock->next = elseBlock;
                 elseBlock->next = postIfBlock;
-
 
                 Tac *elseLabel = allocLabel();
                 branch->dest = elseLabel->dest;
@@ -348,10 +349,11 @@ void printTac(BasicBlock *block) {
 }
 
 BasicBlock *toTac(NODE *tree) {
-    
     BasicBlock *head = allocBasicBlock();
 
     traverse(tree, head);
+#ifdef VERBOSE
     printTac(head);
+#endif
     return head;
 }

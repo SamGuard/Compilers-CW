@@ -1,8 +1,8 @@
 #include "machinecode.h"
 
-char CODE_START[] = ".text\n.globl	main\nmain:\n";
-char CODE_END[] = "li $v0, 10\nsyscall\n";
-const unsigned short WORD_SIZE = 4; // 4 bytes
+const char CODE_START[] = ".text\n.globl	main\nmain:\n";
+const char CODE_END[] = "li $v0, 10\nsyscall\n";
+FILE *file;
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -86,20 +86,32 @@ int getVarLocation(TOKEN *var, Frame *f) {
     getVarLocation(var, f->next);
 }
 
+// Returns a Number which is either immediate or register address
+// Adds instruction to load value to register if needed
+// Reg is the number to use to store the value in if needed
+Number *getOperatorArg(TOKEN *src, Block *b, Number *reg) {
+    Number *n;
+    if (src->type == CONSTANT) {
+        n = newNum(ADDR_IMM, src->value, NULL);
+    } else {
+        n = reg;
+        Number *memLocation = newNum(ADDR_BAS, getVarLocation(src, b->frame),
+                                     newNum(ADDR_REG, REG_SP, NULL));
+        addInstruction(b, INS_LW, reg, memLocation, NULL);
+    }
+    return n;
+}
+
 void mathToInstruction(Block *b, int op, Tac *tac) {
     Number *regA = newNum(ADDR_REG, REG_T_START, NULL),
            *regB = newNum(ADDR_REG, REG_T_START + 1, NULL),
            *regC = newNum(ADDR_REG, REG_T_START + 2, NULL),
-           *num1 = newNum(ADDR_BAS, getVarLocation(tac->src1, b->frame),
-                          newNum(ADDR_REG, REG_SP, NULL)),
-           *num2 = newNum(ADDR_BAS, getVarLocation(tac->src2, b->frame),
-                          newNum(ADDR_REG, REG_SP, NULL)),
            *dest = newNum(ADDR_BAS, getVarLocation(tac->dest, b->frame),
-                          newNum(ADDR_REG, REG_SP, NULL));
+                          newNum(ADDR_REG, REG_SP, NULL)),
+           *num1 = getOperatorArg(tac->src1, b, regA),
+           *num2 = getOperatorArg(tac->src2, b, regB);
 
-    addInstruction(b, INS_LW, regA, num1, NULL);
-    addInstruction(b, INS_LW, regB, num2, NULL);
-    addInstruction(b, INS_ADD, regC, regA, regB);
+    addInstruction(b, INS_ADD, regC, num1, num2);
     addInstruction(b, INS_SW, regC, dest, NULL);
 }
 
@@ -109,6 +121,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
         switch (tacList->op) {
             default:
                 perror("Invalid operation");
+                printf("Operator: %c", tacList->op);
                 break;
             case 'H':
                 break;
@@ -122,9 +135,11 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     *zeroReg = newNum(ADDR_REG, 0, NULL),
                     // The register to put the value into
                     *destReg = newNum(ADDR_REG, REG_T_START, NULL),
-                    *val = newNum(ADDR_IMM, tacList->src1->value, NULL),
-                    *destMem = newNum(ADDR_BAS, getVarLocation(tacList->dest, block->frame),
-                                        newNum(ADDR_REG, REG_SP, NULL));
+                    *val = getOperatorArg(tacList->src1, block,
+                                          newNum(ADDR_REG, REG_T_START, NULL)),
+                    *destMem = newNum(
+                        ADDR_BAS, getVarLocation(tacList->dest, block->frame),
+                        newNum(ADDR_REG, REG_SP, NULL));
 
                 // Add zero and the value and store in register
                 addInstruction(block, INS_ADD, destReg, zeroReg, val);
@@ -135,6 +150,21 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
             case '+': {
                 mathToInstruction(block, '+', tacList);
             }
+
+            case EQ_OP: {
+                /*
+                Number *destMem = newNum(
+                    ADDR_BAS, getVarLocation(tacList->dest, block->frame),
+                    newNum(ADDR_REG, REG_SP, NULL)),
+                    *destReg = newNum(ADDR_REG, REG_T_START, NULL));
+
+
+                addInstruction(block, INS_SEQ, destReg, num1, num2);
+                addInstruction(block, INS_SW, destMem, destReg, NULL);
+                */
+            }
+            case BRANCH_FALSE: {
+            }
         }
         tacList = tacList->next;
     }
@@ -142,6 +172,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
 }
 
 void printNum(Number *n) {
+#if OUTPUT_MODE == 0
     switch (n->addrMode) {
         case ADDR_REG:
             printf("$");
@@ -156,9 +187,27 @@ void printNum(Number *n) {
             printf(")");
             break;
     }
+#endif
+#if OUTPUT_MODE == 1
+    switch (n->addrMode) {
+        case ADDR_REG:
+            fprintf(file, "$");
+            fprintf(file, "%d", n->value);
+            break;
+        case ADDR_IMM:
+            fprintf(file, "%d", n->value);
+            break;
+        case ADDR_BAS:
+            fprintf(file, "%d(", WORD_SIZE * n->value);
+            printNum(n->base);
+            fprintf(file, ")");
+            break;
+    }
+#endif
 }
 
 void printInstruction(char *ins, Number *arg1, Number *arg2, Number *arg3) {
+#if OUTPUT_MODE == 0
     printf("%s ", ins);
     printNum(arg1);
     printf(", ");
@@ -170,15 +219,42 @@ void printInstruction(char *ins, Number *arg1, Number *arg2, Number *arg3) {
     printf(", ");
     printNum(arg3);
     printf("\n");
+#endif
+
+#if OUTPUT_MODE == 1
+    fprintf(file, "%s ", ins);
+    printNum(arg1);
+    fprintf(file, ", ");
+    printNum(arg2);
+    if (arg3 == NULL) {
+        fprintf(file, "\n");
+        return;
+    }
+    fprintf(file, ", ");
+    printNum(arg3);
+    fprintf(file, "\n");
+#endif
 }
 
 // Pritning goes here
 void outputCode(Block *code) {
-    printf(CODE_START);
+#if OUTPUT_MODE == 0
+    printf("\n%s", CODE_START);
+#endif
+#if OUTPUT_MODE == 1
+    file = fopen("./outputs/out.asm", "w");
+    fprintf(file, CODE_START);
+#endif
 
     while (code != NULL) {
         Inst *i = code->head;
+#if OUTPUT_MODE == 0
         printf("addi $sp, $sp, %d\n", -WORD_SIZE * code->frame->frameSize);
+#endif
+#if OUTPUT_MODE == 1
+        fprintf(file, "addi $sp, $sp, %d\n",
+                -WORD_SIZE * code->frame->frameSize);
+#endif
         while (i != NULL) {
             switch (i->op) {
                 default:
@@ -196,10 +272,22 @@ void outputCode(Block *code) {
             }
             i = i->next;
         }
+#if OUTPUT_MODE == 0
         printf("addi $sp, $sp, %d\n", WORD_SIZE * code->frame->frameSize);
+#endif
+#if OUTPUT_MODE == 1
+        fprintf(file, "addi $sp, $sp, %d\n",
+                WORD_SIZE * code->frame->frameSize);
+#endif
         code = code->next;
     }
+#if OUTPUT_MODE == 0
     printf(CODE_END);
+#endif
+#if OUTPUT_MODE == 1
+    fprintf(file, CODE_END);
+    fclose(file);
+#endif
 }
 
 void toMachineCode(BasicBlock *tree) {
