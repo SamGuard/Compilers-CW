@@ -25,6 +25,29 @@ Binding *allocBinding(TOKEN *var, int memLoc) {
     newB->next = NULL;
 }
 
+Block *allocFrame() {
+    Frame *f = (Frame *)malloc(sizeof(Frame));
+    if (f == NULL) {
+        perror("Cannot allocate memory in allocFrame");
+    }
+    f->frameSize = 0;
+    f->next = NULL;
+    f->b = NULL;
+    return f;
+}
+
+Block *allocBlock() {
+    Block *block = (Block *)malloc(sizeof(Block));
+    if (block == NULL) {
+        perror("Cannot allocate memory in allocBlock");
+    }
+
+    block->frame = allocFrame();
+    block->head = block->tail = NULL;
+    block->memSize = 0;
+    block->next = NULL;
+}
+
 void addInstruction(Block *b, int op, Number *arg1, Number *arg2,
                     Number *arg3) {
     Inst *i;
@@ -71,19 +94,26 @@ unsigned int declare(TOKEN *var, Frame *f) {
     return count;
 }
 
-int getVarLocation(TOKEN *var, Frame *f) {
+Number *getVarLocation(TOKEN *var, Frame *f) {
+    int found = FALSE;
     Binding *b = f->b;
     while (b != NULL) {
         if (b->var == var) {
-            return b->memLoc;
+            found = TRUE;
+            break;
         }
         b = b->next;
     }
+
+    if (found == TRUE) {
+        return newNum(ADDR_BAS, b->memLoc, newNum(ADDR_REG, REG_SP, NULL));
+    }
+
     if (f->next == NULL) {
         perror("Variable not declared");
-        return -1;
+        return (void *)0;
     }
-    getVarLocation(var, f->next);
+    Number *n = getVarLocation(var, f->next);
 }
 
 // Returns a Number which is either immediate or register address
@@ -95,8 +125,7 @@ Number *getOperatorArg(TOKEN *src, Block *b, Number *reg) {
         n = newNum(ADDR_IMM, src->value, NULL);
     } else if (src->type == IDENTIFIER) {
         n = reg;
-        Number *memLocation = newNum(ADDR_BAS, getVarLocation(src, b->frame),
-                                     newNum(ADDR_REG, REG_SP, NULL));
+        Number *memLocation = getVarLocation(src, b->frame);
         addInstruction(b, INS_LW, reg, memLocation, NULL);
     } else {
         printf("Invalid type in getOperatorArg\n");
@@ -141,6 +170,13 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
     addInstruction(b, INS_SW, regC, dest, NULL);
 }
 
+Block *newBlock(Block *current) {
+    Block *nextBlock = allocBlock();
+    current->next = nextBlock;
+    moveStackPointer(current, TRUE);
+    return nextBlock;
+}
+
 Block *traverseTac(BasicBlock *graph, Block *block) {
     Tac *tacList = graph->tac;
     while (tacList != NULL) {
@@ -177,7 +213,23 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 break;
 
             case BRANCH_FALSE: {
+                Frame *branchFrame = allocFrame(), *currentFrame = block->frame;
+                branchFrame->next = block->frame;
+
+                // Move stack pointer down and tell what frame to use
+                addInstruction(block, INS_SPF, (Number *)branchFrame, NULL,
+                               NULL);
+                block->frame = branchFrame;
+                traverseTac(graph->next, block);
+                addInstruction(block, INS_SPB, (Number *)currentFrame, NULL,
+                               NULL);
+                block->frame = currentFrame;
+                break;
             }
+            case LABEL:
+                addInstruction(block, LABEL, (Number *)tacList->dest->lexeme,
+                               NULL, NULL);
+                break;
         }
         tacList = tacList->next;
     }
@@ -221,10 +273,24 @@ void printNum(Number *n) {
 #endif
 }
 
+void printLabel(Number *lexeme) {
+#if OUTPUT_MODE == 0
+    printf("%s:\n", (char *)lexeme);
+#endif
+
+#if OUTPUT_MODE == 1
+    fprintf(file, "%s:\n", (char *)lexeme);
+#endif
+}
+
 void printInstruction(char *ins, Number *arg1, Number *arg2, Number *arg3) {
 #if OUTPUT_MODE == 0
     printf("%s ", ins);
     printNum(arg1);
+    if (arg2 == NULL) {
+        printf("\n");
+        return;
+    }
     printf(", ");
     printNum(arg2);
     if (arg3 == NULL) {
@@ -263,13 +329,6 @@ void outputCode(Block *code) {
 
     while (code != NULL) {
         Inst *i = code->head;
-#if OUTPUT_MODE == 0
-        printf("addi $sp, $sp, %d\n", -WORD_SIZE * code->frame->frameSize);
-#endif
-#if OUTPUT_MODE == 1
-        fprintf(file, "addi $sp, $sp, %d\n",
-                -WORD_SIZE * code->frame->frameSize);
-#endif
         while (i != NULL) {
             switch (i->op) {
                 default:
@@ -293,16 +352,12 @@ void outputCode(Block *code) {
                 case '<':
                     printInstruction("slt", i->arg1, i->arg2, i->arg3);
                     break;
+                case LABEL:
+                    printLabel(i->arg1);
+                    break;
             }
             i = i->next;
         }
-#if OUTPUT_MODE == 0
-        printf("addi $sp, $sp, %d\n", WORD_SIZE * code->frame->frameSize);
-#endif
-#if OUTPUT_MODE == 1
-        fprintf(file, "addi $sp, $sp, %d\n",
-                WORD_SIZE * code->frame->frameSize);
-#endif
         code = code->next;
     }
 #if OUTPUT_MODE == 0

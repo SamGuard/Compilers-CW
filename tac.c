@@ -16,13 +16,13 @@ void moveToFrontTac(Tac **t) {
     }
 }
 
-void appendTac(Tac **dest, Tac *src) {
-    if (*dest == NULL) {
+void appendTac(BasicBlock *dest, Tac *src) {
+    if (dest == NULL) {
         perror("Cannot append tac to null list");
         return;
     }
-    moveToFrontTac(dest);
-    (*dest)->next = src;
+    moveToFrontTac(&dest->tail);
+    (dest)->tail->next = src;
 }
 
 void moveToFrontBlock(BasicBlock **dest) {
@@ -46,7 +46,7 @@ Tac *allocTac(TOKEN *token) {
     return t;
 }
 
-Tac *allocTemp(Tac **tac) {
+Tac *allocTemp(BasicBlock* block) {
     Tac *newTac = (Tac *)malloc(sizeof(Tac));
     TOKEN *newTok = (TOKEN *)malloc(sizeof(TOKEN));
     if (newTac == NULL || newTok == NULL) {
@@ -67,7 +67,7 @@ Tac *allocTemp(Tac **tac) {
     declareIns->dest = newTok;
     declareIns->op = '~';
 
-    appendTac(tac, declareIns);
+    appendTac(block, declareIns);
     return newTac;
 }
 
@@ -109,11 +109,11 @@ BasicBlock *allocBasicBlock() {
 }
 
 Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
-    Tac *t = allocTemp(&block->tail);
+    Tac *t = allocTemp(block);
     t->op = op;
     t->src1 = traverse(tree->left, block);
     t->src2 = traverse(tree->right, block);
-    appendTac(&block->tail, t);
+    appendTac(block, t);
     return t;
 }
 
@@ -143,7 +143,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 t = allocTac((TOKEN *)tree->right->left);
             }
             t->op = '~';
-            appendTac(prev, t);
+            appendTac(block, t);
             traverse(tree->right, block);
             return 0;
         }
@@ -151,7 +151,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             Tac *t = allocTac((TOKEN *)tree->left->left);
             t->op = '=';
             t->src1 = traverse(tree->right, block);
-            appendTac(prev, t);
+            appendTac(block, t);
             return t->dest;
         }
         case '+': {
@@ -181,11 +181,11 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             return t->dest;
         }
         case '>': {
-            Tac *t = allocTemp(prev);
+            Tac *t = allocTemp(block);
             t->op = LE_OP;
             t->src2 = traverse(tree->left, block);
             t->src1 = traverse(tree->right, block);
-            appendTac(prev, t);
+            appendTac(block, t);
             return t->dest;
         }
         case EQ_OP: {
@@ -215,7 +215,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             // or not its an if-else statement
             branch->op = BRANCH_FALSE;
             branch->src1 = tok;
-            appendTac(prev, branch);
+            appendTac(block, branch);
 
             // Allocate block for if body
             BasicBlock *ifBlock = allocBasicBlock();
@@ -236,9 +236,9 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 Tac *endIfBranch = allocTac(NULL);
                 endIfBranch->op = BRANCH;
                 endIfBranch->dest = endIfLabel->dest;
-                appendTac(&ifBlock->tac, endIfBranch);
+                appendTac(ifBlock, endIfBranch);
 
-                appendTac(&elseBlock->tac, elseLabel);
+                appendTac(elseBlock, elseLabel);
                 traverse(tree->right->right, elseBlock);
 
             } else {
@@ -246,7 +246,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 branch->dest = endIfLabel->dest;
                 traverse(tree->right, ifBlock);
             }
-            appendTac(&(postIfBlock->tac), endIfLabel);
+            appendTac(postIfBlock, endIfLabel);
         }
         case WHILE:
             break;
