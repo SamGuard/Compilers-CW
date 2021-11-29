@@ -13,6 +13,7 @@ Number *newNum(int addrMode, int value, Number *base) {
     n->addrMode = addrMode;
     n->value = value;
     n->base = base;
+    n->framesBack = -1;
 }
 
 Binding *allocBinding(TOKEN *var, int memLoc) {
@@ -25,7 +26,7 @@ Binding *allocBinding(TOKEN *var, int memLoc) {
     newB->next = NULL;
 }
 
-Block *allocFrame() {
+Frame *allocFrame() {
     Frame *f = (Frame *)malloc(sizeof(Frame));
     if (f == NULL) {
         perror("Cannot allocate memory in allocFrame");
@@ -106,7 +107,9 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
     }
 
     if (found == TRUE) {
-        return newNum(ADDR_BAS, b->memLoc, newNum(ADDR_REG, REG_SP, NULL));
+        Number *n = newNum(ADDR_BAS, b->memLoc, newNum(ADDR_REG, REG_SP, NULL));
+        n->framesBack = 0;
+        return n;
     }
 
     if (f->next == NULL) {
@@ -114,6 +117,8 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
         return (void *)0;
     }
     Number *n = getVarLocation(var, f->next);
+    n->framesBack++;
+    return n;
 }
 
 // Returns a Number which is either immediate or register address
@@ -156,8 +161,7 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
     Number *regA = newNum(ADDR_REG, REG_T_START, NULL),
            *regB = newNum(ADDR_REG, REG_T_START + 1, NULL),
            *regC = newNum(ADDR_REG, REG_T_START + 2, NULL),
-           *dest = newNum(ADDR_BAS, getVarLocation(tac->dest, b->frame),
-                          newNum(ADDR_REG, REG_SP, NULL)),
+           *dest = getVarLocation(tac->dest, b->frame),
            *num1 = getOperatorArg(tac->src1, b, regA),
            *num2 = getOperatorArg(tac->src2, b, regB);
 
@@ -168,13 +172,6 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
 
     addInstruction(b, op, regC, num1, num2);
     addInstruction(b, INS_SW, regC, dest, NULL);
-}
-
-Block *newBlock(Block *current) {
-    Block *nextBlock = allocBlock();
-    current->next = nextBlock;
-    moveStackPointer(current, TRUE);
-    return nextBlock;
 }
 
 Block *traverseTac(BasicBlock *graph, Block *block) {
@@ -194,10 +191,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
             case '=': {  // Set a memory location to a value
 
                 Number *destReg = newNum(ADDR_REG, REG_T_START, NULL),
-                       *destMem =
-                           newNum(ADDR_BAS,
-                                  getVarLocation(tacList->dest, block->frame),
-                                  newNum(ADDR_REG, REG_SP, NULL));
+                       *destMem = getVarLocation(tacList->dest, block->frame);
 
                 // Load value into the register
                 setRegister(tacList->src1, block, destReg);
@@ -213,6 +207,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 break;
 
             case BRANCH_FALSE: {
+                
                 Frame *branchFrame = allocFrame(), *currentFrame = block->frame;
                 branchFrame->next = block->frame;
 
@@ -238,7 +233,27 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
 
 // ------------------------------PRINTING-------------------
 
-void printNum(Number *n) {
+// Returns the amount bytes to move back to find a variable in a different frame
+int calcVariableOffset(Frame *f, Number *n) {
+    Frame *currFrame = f;
+    int stepsBack = n->framesBack;
+    if (stepsBack == -1 || n->addrMode != ADDR_BAS) {
+        perror("Invlaid number given to calcVariableOffset");
+    }
+
+    unsigned int count = n->value;
+    while (stepsBack > 0) {
+        count += currFrame->frameSize;
+        currFrame = currFrame->next;
+        stepsBack--;
+        if (currFrame == NULL) {
+            perror("No more frames to look through, bad variable");
+        }
+    }
+    return count * WORD_SIZE;
+}
+
+void printNum(Frame *f, Number *n) {
 #if OUTPUT_MODE == 0
     switch (n->addrMode) {
         case ADDR_REG:
@@ -249,8 +264,8 @@ void printNum(Number *n) {
             printf("%d", n->value);
             break;
         case ADDR_BAS:
-            printf("%d(", WORD_SIZE * n->value);
-            printNum(n->base);
+            printf("%d(", calcVariableOffset(f, n));
+            printNum(f, n->base);
             printf(")");
             break;
     }
@@ -265,8 +280,8 @@ void printNum(Number *n) {
             fprintf(file, "%d", n->value);
             break;
         case ADDR_BAS:
-            fprintf(file, "%d(", WORD_SIZE * n->value);
-            printNum(n->base);
+            fprintf(file, "%d(", calcVariableOffset(f, n));
+            printNum(f, n->base);
             fprintf(file, ")");
             break;
     }
@@ -283,36 +298,46 @@ void printLabel(Number *lexeme) {
 #endif
 }
 
-void printInstruction(char *ins, Number *arg1, Number *arg2, Number *arg3) {
+void printMoveStack(int bytesToMove) {
+#if OUTPUT_MODE == 0
+    printf("addi $sp, $sp, %d\n", bytesToMove);
+#endif
+#if OUTPUT_MODE == 1
+    fprintf(file, "addi $sp, $sp, %d\n", bytesToMove);
+#endif
+}
+
+void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
+                      Number *arg3) {
 #if OUTPUT_MODE == 0
     printf("%s ", ins);
-    printNum(arg1);
+    printNum(f, arg1);
     if (arg2 == NULL) {
         printf("\n");
         return;
     }
     printf(", ");
-    printNum(arg2);
+    printNum(f, arg2);
     if (arg3 == NULL) {
         printf("\n");
         return;
     }
     printf(", ");
-    printNum(arg3);
+    printNum(f, arg3);
     printf("\n");
 #endif
 
 #if OUTPUT_MODE == 1
     fprintf(file, "%s ", ins);
-    printNum(arg1);
+    printNum(f, arg1);
     fprintf(file, ", ");
-    printNum(arg2);
+    printNum(f, arg2);
     if (arg3 == NULL) {
         fprintf(file, "\n");
         return;
     }
     fprintf(file, ", ");
-    printNum(arg3);
+    printNum(f, arg3);
     fprintf(file, "\n");
 #endif
 }
@@ -328,6 +353,14 @@ void outputCode(Block *code) {
 #endif
 
     while (code != NULL) {
+#if OUTPUT_MODE == 0
+        printf("addi $sp, $sp, %d\n", -1 * WORD_SIZE * code->frame->frameSize);
+#endif
+#if OUTPUT_MODE == 1
+        fprintf(file, "addi $sp, $sp, %d\n", -1 * WORD_SIZE * code->frame->frameSize);
+#endif
+
+        Frame *currFrame = code->frame;
         Inst *i = code->head;
         while (i != NULL) {
             switch (i->op) {
@@ -335,29 +368,47 @@ void outputCode(Block *code) {
                     perror("Invalid instruction");
                     break;
                 case INS_SW:
-                    printInstruction("sw", i->arg1, i->arg2, NULL);
+                    printInstruction("sw", currFrame, i->arg1, i->arg2, NULL);
                     break;
                 case INS_LW:
-                    printInstruction("lw", i->arg1, i->arg2, NULL);
+                    printInstruction("lw", currFrame, i->arg1, i->arg2, NULL);
                     break;
                 case '+':
-                    printInstruction("add", i->arg1, i->arg2, i->arg3);
+                    printInstruction("add", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
                     break;
                 case '-':
-                    printInstruction("sub", i->arg1, i->arg2, i->arg3);
+                    printInstruction("sub", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
                     break;
                 case EQ_OP:
-                    printInstruction("seq", i->arg1, i->arg2, i->arg3);
+                    printInstruction("seq", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
                     break;
                 case '<':
-                    printInstruction("slt", i->arg1, i->arg2, i->arg3);
+                    printInstruction("slt", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
                     break;
                 case LABEL:
                     printLabel(i->arg1);
                     break;
+                case INS_SPF:
+                    currFrame = (Frame *)i->arg1;
+                    printMoveStack(currFrame->frameSize * WORD_SIZE);
+                    break;
+                case INS_SPB:
+                    printMoveStack(currFrame->frameSize * WORD_SIZE * -1);
+                    currFrame = code->frame;
+                    break;
             }
             i = i->next;
         }
+#if OUTPUT_MODE == 0
+        printf(file, "addi $sp, $sp, %d\n", code->frame->frameSize);
+#endif
+#if OUTPUT_MODE == 1
+        fprintf(file, "addi $sp, $sp, %d\n", code->frame->frameSize);
+#endif
         code = code->next;
     }
 #if OUTPUT_MODE == 0
