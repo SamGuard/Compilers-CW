@@ -118,7 +118,7 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
 }
 
 TOKEN *traverse(NODE *tree, BasicBlock *block) {
-    Tac *prev = block->tail;  // Previous tac to append onto
+    Tac **prev = &block->tail;  // Previous tac to append onto
 #ifdef VERBOSE
     printf("%c\n", tree->type);
 #endif
@@ -143,7 +143,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 t = allocTac((TOKEN *)tree->right->left);
             }
             t->op = '~';
-            appendTac(&prev, t);
+            appendTac(prev, t);
             traverse(tree->right, block);
             return 0;
         }
@@ -151,7 +151,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             Tac *t = allocTac((TOKEN *)tree->left->left);
             t->op = '=';
             t->src1 = traverse(tree->right, block);
-            appendTac(&prev, t);
+            appendTac(prev, t);
             return t->dest;
         }
         case '+': {
@@ -181,11 +181,11 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             return t->dest;
         }
         case '>': {
-            Tac *t = allocTemp(&prev);
+            Tac *t = allocTemp(prev);
             t->op = LE_OP;
             t->src2 = traverse(tree->left, block);
             t->src1 = traverse(tree->right, block);
-            appendTac(&prev, t);
+            appendTac(prev, t);
             return t->dest;
         }
         case EQ_OP: {
@@ -215,7 +215,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             // or not its an if-else statement
             branch->op = BRANCH_FALSE;
             branch->src1 = tok;
-            appendTac(&prev, branch);
+            appendTac(prev, branch);
 
             // Allocate block for if body
             BasicBlock *ifBlock = allocBasicBlock();
@@ -236,9 +236,9 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 Tac *endIfBranch = allocTac(NULL);
                 endIfBranch->op = BRANCH;
                 endIfBranch->dest = endIfLabel->dest;
-                appendTac(&prev, endIfBranch);
+                appendTac(&ifBlock->tac, endIfBranch);
 
-                appendTac(&prev, elseLabel);
+                appendTac(&elseBlock->tac, elseLabel);
                 traverse(tree->right->right, elseBlock);
 
             } else {

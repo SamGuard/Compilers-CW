@@ -93,16 +93,37 @@ Number *getOperatorArg(TOKEN *src, Block *b, Number *reg) {
     Number *n;
     if (src->type == CONSTANT) {
         n = newNum(ADDR_IMM, src->value, NULL);
-    } else {
+    } else if (src->type == IDENTIFIER) {
         n = reg;
         Number *memLocation = newNum(ADDR_BAS, getVarLocation(src, b->frame),
                                      newNum(ADDR_REG, REG_SP, NULL));
         addInstruction(b, INS_LW, reg, memLocation, NULL);
+    } else {
+        printf("Invalid type in getOperatorArg\n");
     }
     return n;
 }
 
+void setRegister(TOKEN *src, Block *b, Number *destReg) {
+    if (src->type == CONSTANT) {
+        Number
+            // Hold the value 0
+            *zeroReg = newNum(ADDR_REG, 0, NULL),
+            *val = newNum(ADDR_IMM, src->value, NULL);
+        addInstruction(b, INS_ADD, destReg, zeroReg, val);
+    } else if (src->type == IDENTIFIER) {
+        getOperatorArg(src, b, destReg);
+    } else {
+        printf("Invalid type in setRegister %d\n", src->type);
+    }
+}
+
 void mathToInstruction(Block *b, int op, Tac *tac) {
+    // regA, regB are used to store the two argument IF necessary. They are
+    // used to store values from memory, they are not used for immediate values
+    // regC is the out register for the calculation
+    // dest is the memory location to store the result in
+    // num1, num2 stores either register pointer or immediate value
     Number *regA = newNum(ADDR_REG, REG_T_START, NULL),
            *regB = newNum(ADDR_REG, REG_T_START + 1, NULL),
            *regC = newNum(ADDR_REG, REG_T_START + 2, NULL),
@@ -111,7 +132,12 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
            *num1 = getOperatorArg(tac->src1, b, regA),
            *num2 = getOperatorArg(tac->src2, b, regB);
 
-    addInstruction(b, INS_ADD, regC, num1, num2);
+    if ((op == '<' || op == EQ_OP) && num1->addrMode == ADDR_IMM) {
+        num1 = regA;
+        setRegister(tac->src1, b, regA);
+    }
+
+    addInstruction(b, op, regC, num1, num2);
     addInstruction(b, INS_SW, regC, dest, NULL);
 }
 
@@ -120,8 +146,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
     while (tacList != NULL) {
         switch (tacList->op) {
             default:
+                printf("Operator: %d\n", tacList->op);
                 perror("Invalid operation");
-                printf("Operator: %c", tacList->op);
                 break;
             case 'H':
                 break;
@@ -130,39 +156,26 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 break;
             }
             case '=': {  // Set a memory location to a value
-                Number
-                    // Hold the value 0
-                    *zeroReg = newNum(ADDR_REG, 0, NULL),
-                    // The register to put the value into
-                    *destReg = newNum(ADDR_REG, REG_T_START, NULL),
-                    *val = getOperatorArg(tacList->src1, block,
-                                          newNum(ADDR_REG, REG_T_START, NULL)),
-                    *destMem = newNum(
-                        ADDR_BAS, getVarLocation(tacList->dest, block->frame),
-                        newNum(ADDR_REG, REG_SP, NULL));
 
-                // Add zero and the value and store in register
-                addInstruction(block, INS_ADD, destReg, zeroReg, val);
+                Number *destReg = newNum(ADDR_REG, REG_T_START, NULL),
+                       *destMem =
+                           newNum(ADDR_BAS,
+                                  getVarLocation(tacList->dest, block->frame),
+                                  newNum(ADDR_REG, REG_SP, NULL));
+
+                // Load value into the register
+                setRegister(tacList->src1, block, destReg);
                 // Write the value in the register to the memory
                 addInstruction(block, INS_SW, destReg, destMem, NULL);
                 break;
             }
-            case '+': {
-                mathToInstruction(block, '+', tacList);
-            }
+            case '+':
+            case '-':
+            case EQ_OP:
+            case '<':
+                mathToInstruction(block, tacList->op, tacList);
+                break;
 
-            case EQ_OP: {
-                /*
-                Number *destMem = newNum(
-                    ADDR_BAS, getVarLocation(tacList->dest, block->frame),
-                    newNum(ADDR_REG, REG_SP, NULL)),
-                    *destReg = newNum(ADDR_REG, REG_T_START, NULL));
-
-
-                addInstruction(block, INS_SEQ, destReg, num1, num2);
-                addInstruction(block, INS_SW, destMem, destReg, NULL);
-                */
-            }
             case BRANCH_FALSE: {
             }
         }
@@ -170,6 +183,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
     }
     return block;
 }
+
+// ------------------------------PRINTING-------------------
 
 void printNum(Number *n) {
 #if OUTPUT_MODE == 0
@@ -266,8 +281,17 @@ void outputCode(Block *code) {
                 case INS_LW:
                     printInstruction("lw", i->arg1, i->arg2, NULL);
                     break;
-                case INS_ADD:
+                case '+':
                     printInstruction("add", i->arg1, i->arg2, i->arg3);
+                    break;
+                case '-':
+                    printInstruction("sub", i->arg1, i->arg2, i->arg3);
+                    break;
+                case EQ_OP:
+                    printInstruction("seq", i->arg1, i->arg2, i->arg3);
+                    break;
+                case '<':
+                    printInstruction("slt", i->arg1, i->arg2, i->arg3);
                     break;
             }
             i = i->next;
@@ -289,6 +313,8 @@ void outputCode(Block *code) {
     fclose(file);
 #endif
 }
+
+// ------------------------------PRINTING-------------------
 
 void toMachineCode(BasicBlock *tree) {
     Block b;

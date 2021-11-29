@@ -5,17 +5,17 @@
 #include "./tac.h"
 #include "./traverseStructures.h"
 
-#define OUTPUT_MODE 0 // 0 is to print, 1 is write to file
+#define OUTPUT_MODE 1 // 0 is to print, 1 is write to file
 
 #define WORD_SIZE 4 //Word size in bytes
 
-#define INVALID 0 // Any instruction or addressing mode cannot be 0, helping catch mistakes
+#define INS_LW 257
 
-#define INS_LW 1
+#define INS_SW 258
 
-#define INS_SW 2
-
-#define INS_ADD 3
+#define INS_ADD '+'
+#define INS_SUB '-'
+#define INS_LET '<'
 
 #define REG_T_START 8 //Which register is the start of the temp registers
 #define REG_SP 29 // Which register holds the stack pointer
