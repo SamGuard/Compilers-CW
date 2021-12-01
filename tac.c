@@ -43,10 +43,11 @@ Tac *allocTac(TOKEN *token) {
     }
     t->next = NULL;
     t->dest = token;
+
     return t;
 }
 
-Tac *allocTemp(BasicBlock* block) {
+Tac *allocTemp(BasicBlock *block) {
     Tac *newTac = (Tac *)malloc(sizeof(Tac));
     TOKEN *newTok = (TOKEN *)malloc(sizeof(TOKEN));
     if (newTac == NULL || newTok == NULL) {
@@ -106,6 +107,20 @@ BasicBlock *allocBasicBlock() {
     newBasicBlock->size = 0;
     newBasicBlock->tac = newBasicBlock->tail = homeTac;
     return newBasicBlock;
+}
+
+void moveScope(BasicBlock *block, int moveUp) {
+    if (moveUp == TRUE) {
+        Tac *scopeUp = allocTac(NULL);
+        scopeUp->op = SCOPE_UP;
+        scopeUp->next = NULL;
+        appendTac(block, scopeUp);
+    } else {
+        Tac *scopeDown = allocTac(NULL);
+        scopeDown->op = SCOPE_DOWN;
+        scopeDown->next = NULL;
+        appendTac(block, scopeDown);
+    }
 }
 
 Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
@@ -232,19 +247,26 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 Tac *elseLabel = allocLabel();
                 branch->dest = elseLabel->dest;
 
+                moveScope(ifBlock, FALSE);
                 traverse(tree->right->left, ifBlock);
+                moveScope(ifBlock, TRUE);
+
                 Tac *endIfBranch = allocTac(NULL);
                 endIfBranch->op = BRANCH;
                 endIfBranch->dest = endIfLabel->dest;
                 appendTac(ifBlock, endIfBranch);
 
                 appendTac(elseBlock, elseLabel);
+                moveScope(elseBlock, FALSE);
                 traverse(tree->right->right, elseBlock);
+                moveScope(elseBlock, TRUE);
 
             } else {
                 ifBlock->next = postIfBlock;
                 branch->dest = endIfLabel->dest;
+                moveScope(ifBlock, FALSE);
                 traverse(tree->right, ifBlock);
+                moveScope(ifBlock, TRUE);
             }
             appendTac(postIfBlock, endIfLabel);
         }
@@ -332,6 +354,10 @@ void printTac(BasicBlock *block) {
                 } else {
                     printf("~ %s", t->dest->lexeme);
                 }
+            } else if (t->op == SCOPE_DOWN) {
+                printf("---SCOPE_DOWN---");
+            } else if (t->op == SCOPE_UP) {
+                printf("----SCOPE_UP----");
             } else {
                 printToken(t->dest);
                 printf("=");

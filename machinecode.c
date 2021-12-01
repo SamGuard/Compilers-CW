@@ -175,58 +175,75 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
 }
 
 Block *traverseTac(BasicBlock *graph, Block *block) {
-    Tac *tacList = graph->tac;
-    while (tacList != NULL) {
-        switch (tacList->op) {
-            default:
-                printf("Operator: %d\n", tacList->op);
-                perror("Invalid operation");
-                break;
-            case 'H':
-                break;
-            case '~': {
-                declare(tacList->dest, block->frame);
-                break;
+    while (graph != NULL) {
+        Tac *tacList = graph->tac;
+        while (tacList != NULL) {
+            switch (tacList->op) {
+                default:
+                    printf("Operator: %d\n", tacList->op);
+                    perror("Invalid operation");
+                    break;
+                case 'H':
+                    break;
+                case '~': {
+                    declare(tacList->dest, block->frame);
+                    break;
+                }
+                case '=': {  // Set a memory location to a value
+
+                    Number *destReg = newNum(ADDR_REG, REG_T_START, NULL),
+                           *destMem =
+                               getVarLocation(tacList->dest, block->frame);
+
+                    // Load value into the register
+                    setRegister(tacList->src1, block, destReg);
+                    // Write the value in the register to the memory
+                    addInstruction(block, INS_SW, destReg, destMem, NULL);
+                    break;
+                }
+                case '+':
+                case '-':
+                case EQ_OP:
+                case '<':
+                    mathToInstruction(block, tacList->op, tacList);
+                    break;
+
+                case SCOPE_DOWN: {
+                    Frame *newFrame = allocFrame();
+                    newFrame->next = block->frame;
+                    block->frame = newFrame;
+                    addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
+                                   NULL);
+                    break;
+                }
+                case SCOPE_UP: {
+                    Frame *oldFrame = block->frame;
+                    block->frame = block->frame->next;
+                    addInstruction(block, INS_SPU, (Number *)oldFrame, NULL,
+                                   NULL);
+                    break;
+                }
+                case BRANCH:
+                    addInstruction(block, BRANCH, (Number *)tacList->dest, NULL,
+                                   NULL);
+                    break;
+                case BRANCH_FALSE: {
+                    // Branch if the value is 0
+                    // Register to load value into
+                    Number *reg = newNum(ADDR_REG, REG_T_START, NULL);
+                    Number *value = getOperatorArg(tacList->src1, block, reg);
+                    addInstruction(block, INS_BZE, (Number *)tacList->dest,
+                                   value, NULL);
+                    break;
+                }
+                case LABEL:
+                    addInstruction(block, LABEL, (Number *)tacList->dest, NULL,
+                                   NULL);
+                    break;
             }
-            case '=': {  // Set a memory location to a value
-
-                Number *destReg = newNum(ADDR_REG, REG_T_START, NULL),
-                       *destMem = getVarLocation(tacList->dest, block->frame);
-
-                // Load value into the register
-                setRegister(tacList->src1, block, destReg);
-                // Write the value in the register to the memory
-                addInstruction(block, INS_SW, destReg, destMem, NULL);
-                break;
-            }
-            case '+':
-            case '-':
-            case EQ_OP:
-            case '<':
-                mathToInstruction(block, tacList->op, tacList);
-                break;
-
-            case BRANCH_FALSE: {
-                
-                Frame *branchFrame = allocFrame(), *currentFrame = block->frame;
-                branchFrame->next = block->frame;
-
-                // Move stack pointer down and tell what frame to use
-                addInstruction(block, INS_SPF, (Number *)branchFrame, NULL,
-                               NULL);
-                block->frame = branchFrame;
-                traverseTac(graph->next, block);
-                addInstruction(block, INS_SPB, (Number *)currentFrame, NULL,
-                               NULL);
-                block->frame = currentFrame;
-                break;
-            }
-            case LABEL:
-                addInstruction(block, LABEL, (Number *)tacList->dest->lexeme,
-                               NULL, NULL);
-                break;
+            tacList = tacList->next;
         }
-        tacList = tacList->next;
+        graph = graph->next;
     }
     return block;
 }
@@ -288,13 +305,40 @@ void printNum(Frame *f, Number *n) {
 #endif
 }
 
-void printLabel(Number *lexeme) {
+void printLabel(Number *label) {
+    TOKEN *l = (TOKEN *)label;
 #if OUTPUT_MODE == 0
-    printf("%s:\n", (char *)lexeme);
+    printf("%s%d:\n", l->lexeme, l->value);
 #endif
 
 #if OUTPUT_MODE == 1
-    fprintf(file, "%s:\n", (char *)lexeme);
+    fprintf(file, "%s%d:\n", l->lexeme, l->value);
+#endif
+}
+
+void printBranch(Frame *f, Number *label, Number *val) {
+    TOKEN *l = (TOKEN *)label;
+    if (val == NULL) {
+#if OUTPUT_MODE == 0
+        printf("j %s%d\n", l->lexeme, l->value);
+#endif
+#if OUTPUT_MODE == 1
+        fprintf(file, "j %s%d\n", l->lexeme, l->value);
+#endif
+        return;
+    }
+
+#if OUTPUT_MODE == 0
+    printf("beqz %s%d, ", l->lexeme, l->value);
+    printNum(f, val);
+    printf("\n");
+#endif
+
+#if OUTPUT_MODE == 1
+    fprintf(file, "beqz ");
+    printNum(f, val);
+    fprintf(file, ", %s%d", l->lexeme, l->value);
+    fprintf(file, "\n");
 #endif
 }
 
@@ -342,8 +386,20 @@ void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
 #endif
 }
 
+void printIndent(unsigned int depth) {
+    for (int i = 0; i < depth; i++) {
+#if OUTPUT_MODE == 0
+        printf("    ");
+#endif
+#if OUTPUT_MODE == 1
+        fprintf(file, "   ");
+#endif
+    }
+}
+
 // Pritning goes here
 void outputCode(Block *code) {
+    unsigned int depth = 0;
 #if OUTPUT_MODE == 0
     printf("\n%s", CODE_START);
 #endif
@@ -357,12 +413,14 @@ void outputCode(Block *code) {
         printf("addi $sp, $sp, %d\n", -1 * WORD_SIZE * code->frame->frameSize);
 #endif
 #if OUTPUT_MODE == 1
-        fprintf(file, "addi $sp, $sp, %d\n", -1 * WORD_SIZE * code->frame->frameSize);
+        fprintf(file, "addi $sp, $sp, %d\n",
+                -1 * WORD_SIZE * code->frame->frameSize);
 #endif
 
         Frame *currFrame = code->frame;
         Inst *i = code->head;
         while (i != NULL) {
+            printIndent(depth);
             switch (i->op) {
                 default:
                     perror("Invalid instruction");
@@ -392,19 +450,28 @@ void outputCode(Block *code) {
                 case LABEL:
                     printLabel(i->arg1);
                     break;
-                case INS_SPF:
+                case INS_SPD:
+                    depth++;
                     currFrame = (Frame *)i->arg1;
-                    printMoveStack(currFrame->frameSize * WORD_SIZE);
-                    break;
-                case INS_SPB:
                     printMoveStack(currFrame->frameSize * WORD_SIZE * -1);
-                    currFrame = code->frame;
+                    break;
+                case INS_SPU:
+                    if (depth == 0)
+                        perror("No more stack to pop");
+                    else
+                        depth--;
+                    printMoveStack(currFrame->frameSize * WORD_SIZE);
+                    currFrame = currFrame->next;
+                    break;
+                case BRANCH:
+                case INS_BZE:
+                    printBranch(currFrame, i->arg1, i->arg2);
                     break;
             }
             i = i->next;
         }
 #if OUTPUT_MODE == 0
-        printf(file, "addi $sp, $sp, %d\n", code->frame->frameSize);
+        printf("addi $sp, $sp, %d\n", code->frame->frameSize);
 #endif
 #if OUTPUT_MODE == 1
         fprintf(file, "addi $sp, $sp, %d\n", code->frame->frameSize);

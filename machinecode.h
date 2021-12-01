@@ -10,18 +10,23 @@
 
 #define WORD_SIZE 4  // Word size in bytes
 
-#define INS_LW 257
+// Memory IO
+#define INS_LW 512
 
-#define INS_SW 258
+#define INS_SW 513
 
+// Maths and Comparison
 #define INS_ADD '+'
-#define INS_SUB '-'
-#define INS_LET '<'
+#define INS_SUB '-' // 
+#define INS_LET '<' // Less than
+
+//Branching
+#define INS_BZE 514 // Branch if 0
 
 // Psuedo instruction move stack pointer, frame size is only available
 // post traversal so it set in outputCode
-#define INS_SPF 259 // Decrease stack pointer
-#define INS_SPB 260 // Increment stack pointer
+#define INS_SPD 515 // Decrease stack pointer
+#define INS_SPU 516 // Increment stack pointer
 
 #define REG_T_START 8  // Which register is the start of the temp registers
 #define REG_SP 29      // Which register holds the stack pointer
