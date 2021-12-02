@@ -2,7 +2,9 @@
 
 const char CODE_START[] = ".text\n.globl	main\nmain:\n";
 const char CODE_END[] = "li $v0, 10\nsyscall\n";
-FILE *file;
+FILE *file;  // File to write assembly to
+
+Frame *globalFrame;
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -16,7 +18,7 @@ Number *newNum(int addrMode, int value, Number *base) {
     n->framesBack = -1;
 }
 
-Binding *allocBinding(TOKEN *var, int memLoc) {
+Binding *allocBinding(TOKEN *var, Value memLoc) {
     Binding *newB = (Binding *)malloc(sizeof(Binding));
     if (newB == NULL) {
         perror("Cannot allocate memory in allocBinding");
@@ -47,6 +49,7 @@ Block *allocBlock() {
     block->head = block->tail = NULL;
     block->memSize = 0;
     block->next = NULL;
+    return block;
 }
 
 void addInstruction(Block *b, int op, Number *arg1, Number *arg2,
@@ -70,25 +73,32 @@ void addInstruction(Block *b, int op, Number *arg1, Number *arg2,
     b->tail = i;
 }
 
-unsigned int declare(TOKEN *var, Frame *f) {
+Value declare(TOKEN *var, Frame *f) {
     if (f->b == NULL) {
-        f->b = allocBinding(var, 0);
+        Value z;
+        z.i = 0;
+        f->b = allocBinding(var, z);
         f->frameSize++;
-        return 0;
+        return z;
     }
-    unsigned int count = 1;
+    Value count;
+    count.i = 1;
     Binding *b = f->b;
     if (b->var == var) {
         perror("Variable already declared");
-        return -1;
+        Value z;
+        z.i = -1;
+        return z;
     }
     while (b->next != NULL) {
         if (b->var == var) {
             perror("Variable already declared");
-            return -1;
+            Value z;
+            z.i = -1;
+            return z;
         }
         b = b->next;
-        count++;
+        count.i++;
     }
     f->frameSize++;
     b->next = allocBinding(var, count);
@@ -107,7 +117,8 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
     }
 
     if (found == TRUE) {
-        Number *n = newNum(ADDR_BAS, b->memLoc, newNum(ADDR_REG, REG_SP, NULL));
+        Number *n =
+            newNum(ADDR_BAS, b->memLoc.i, newNum(ADDR_REG, REG_SP, NULL));
         n->framesBack = 0;
         return n;
     }
@@ -224,8 +235,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case BRANCH:
-                    addInstruction(block, BRANCH, (Number *)tacList->dest, NULL,
-                                   NULL);
+                    addInstruction(block, INS_JMP, (Number *)tacList->dest,
+                                   NULL, NULL);
                     break;
                 case BRANCH_FALSE: {
                     // Branch if the value is 0
@@ -240,6 +251,35 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     addInstruction(block, LABEL, (Number *)tacList->dest, NULL,
                                    NULL);
                     break;
+                case DEFINE_FUNC_START: {
+                    declare(tacList->dest, block->frame);
+                    Frame *funcFrame = allocFrame();
+                    funcFrame->next = block->frame;
+                    block->frame = funcFrame;
+                    break;
+                }
+                case DEFINE_FUNC_END: {
+                    if (block->frame->next == NULL) {
+                        perror("No more frames left");
+                    }
+                    block->frame = block->frame->next;
+                    break;
+                }
+                case LOAD_RET_ADDR: {
+                    Number *returnReg = newNum(ADDR_REG, REG_RA, NULL);
+                    getOperatorArg(tacList->dest, block, returnReg);
+                    break;
+                }
+                case SAVE_RET_ADDR: {
+                    Number *returnReg = newNum(ADDR_REG, REG_RA, NULL);
+                    addInstruction(block, INS_SW, returnReg,
+                                   getVarLocation(tacList->dest, block->frame),
+                                   NULL);
+                }
+                case RETURN: {
+                    addInstruction(block, INS_JPR, NULL, NULL, NULL);
+                    break;
+                }
             }
             tacList = tacList->next;
         }
@@ -463,7 +503,7 @@ void outputCode(Block *code) {
                     printMoveStack(currFrame->frameSize * WORD_SIZE);
                     currFrame = currFrame->next;
                     break;
-                case BRANCH:
+                case INS_JMP:
                 case INS_BZE:
                     printBranch(currFrame, i->arg1, i->arg2);
                     break;
@@ -490,16 +530,9 @@ void outputCode(Block *code) {
 // ------------------------------PRINTING-------------------
 
 void toMachineCode(BasicBlock *tree) {
-    Block b;
-    Frame f;
+    Block *block = allocBlock();
+    globalFrame = allocFrame();
+    block->frame = globalFrame;
 
-    f.b = NULL;
-    f.frameSize = 0;
-    f.next = NULL;
-    b.head = b.tail = NULL;
-    b.next = NULL;
-    b.memSize = 0;
-    b.frame = &f;
-
-    outputCode(traverseTac(tree, &b));
+    outputCode(traverseTac(tree, block));
 }

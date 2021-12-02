@@ -10,6 +10,8 @@
 
 #define WORD_SIZE 4  // Word size in bytes
 
+#define MAX_ARG_SIZE 4; // Maximum amount of arguements a function can have
+
 // Memory IO
 #define INS_LW 512
 
@@ -22,18 +24,36 @@
 
 //Branching
 #define INS_BZE 514 // Branch if 0
+#define INS_JMP 515 // Jump
+#define INS_JAL 516 // Jump and set return address
+#define INS_JPR 517 // Return from jump
 
 // Psuedo instruction move stack pointer, frame size is only available
 // post traversal so it set in outputCode
-#define INS_SPD 515 // Decrease stack pointer
-#define INS_SPU 516 // Increment stack pointer
+#define INS_SPD 518 // Decrease stack pointer
+#define INS_SPU 519 // Increment stack pointer
 
 #define REG_T_START 8  // Which register is the start of the temp registers
+#define REG_RA 31
 #define REG_SP 29      // Which register holds the stack pointer
 
 #define ADDR_IMM 1  // Immediate addressing
 #define ADDR_REG 2  // Register addressing
 #define ADDR_BAS 3  // Base addressing
+
+typedef struct Frame Frame;
+
+typedef struct Closure {
+    unsigned int argSize;
+    Tac* startLabel;
+    Frame *prev;
+} Closure;
+
+typedef union Value {
+    int i;    // Int
+    char *s;  // String
+    Closure *f;  // Function
+} Value;
 
 typedef struct Number {
     int addrMode;
@@ -44,7 +64,7 @@ typedef struct Number {
 
 typedef struct Binding {
     TOKEN *var;
-    int memLoc;
+    Value memLoc;
     struct Binding *next;
 } Binding;
 

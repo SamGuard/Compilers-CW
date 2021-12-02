@@ -110,7 +110,7 @@ int main(int argc, char **argv) {
     yyparse();
     tree = ans;
     //printf("parse finished with %p\n", tree);
-    //print_tree(tree);
+    print_tree(tree);
 
 #if (IS_INTERPRETER == 1)
     interpreter(tree);

@@ -134,33 +134,56 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
 
 TOKEN *traverse(NODE *tree, BasicBlock *block) {
     Tac **prev = &block->tail;  // Previous tac to append onto
-#ifdef VERBOSE
-    printf("%c\n", tree->type);
-#endif
     switch (tree->type) {
         default:
             perror("unexpected type");
         case 0:
             break;
-        case 'D':
-            traverse(tree->right, block);
-            return 0;
+        case 'D': {
+            BasicBlock *funcBlock = allocBasicBlock();
+            Tac *funcStart = allocLabel(), *funcDefStart = allocTac(NULL),
+                *funcDefEnd = allocTac(NULL);
+            funcDefStart->op = DEFINE_FUNC_START;
+            // Function name
+            funcDefStart->dest = (TOKEN *)tree->left->right->left->left;
+            // Label for the function
+            funcDefStart->src1 = (TOKEN *)funcStart;
+
+            funcDefEnd->op = DEFINE_FUNC_END;
+
+            appendBlock(&block, funcBlock);
+
+            appendTac(funcBlock, funcDefStart);
+            appendTac(funcBlock, funcStart);
+            moveScope(funcBlock, FALSE);
+            traverse(tree->right, funcBlock);
+            moveToFrontBlock(&funcBlock);
+            appendTac(funcBlock, funcDefEnd);
+            break;
+        }
         case ';':
             traverse(tree->left, block);
             moveToFrontBlock(&block);
             traverse(tree->right, block);
             return 0;
         case '~': {
-            Tac *t;
-            if (tree->right->type == '=') {
-                t = allocTac((TOKEN *)tree->right->left->left);
+            if (tree->left->type == LEAF) {
+                Tac *t;
+                if (tree->right->type == '=') {
+                    t = allocTac((TOKEN *)tree->right->left->left);
+                } else {
+                    t = allocTac((TOKEN *)tree->right->left);
+                }
+                t->op = '~';
+                appendTac(block, t);
+                traverse(tree->right, block);
+                return 0;
             } else {
-                t = allocTac((TOKEN *)tree->right->left);
+                traverse(tree->left, block);
+                moveToFrontBlock(&block);
+                traverse(tree->right, block);
+                return 0;
             }
-            t->op = '~';
-            appendTac(block, t);
-            traverse(tree->right, block);
-            return 0;
         }
         case '=': {
             Tac *t = allocTac((TOKEN *)tree->left->left);
@@ -221,7 +244,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             return t->dest;
         }
         case IF: {
-            TOKEN *tok = traverse(tree->left, block);
+            TOKEN *condition = traverse(tree->left, block);
 
             Tac *branch = allocTac(NULL);
             Tac *endIfLabel = allocLabel();
@@ -229,7 +252,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             // Branch instruction, label to jump to is set depending on whether
             // or not its an if-else statement
             branch->op = BRANCH_FALSE;
-            branch->src1 = tok;
+            branch->src1 = condition;
             appendTac(block, branch);
 
             // Allocate block for if body
@@ -249,6 +272,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
 
                 moveScope(ifBlock, FALSE);
                 traverse(tree->right->left, ifBlock);
+                moveToFrontBlock(&ifBlock);
                 moveScope(ifBlock, TRUE);
 
                 Tac *endIfBranch = allocTac(NULL);
@@ -259,6 +283,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 appendTac(elseBlock, elseLabel);
                 moveScope(elseBlock, FALSE);
                 traverse(tree->right->right, elseBlock);
+                moveToFrontBlock(&elseBlock);
                 moveScope(elseBlock, TRUE);
 
             } else {
@@ -266,21 +291,100 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 branch->dest = endIfLabel->dest;
                 moveScope(ifBlock, FALSE);
                 traverse(tree->right, ifBlock);
+                moveToFrontBlock(&ifBlock);
                 moveScope(ifBlock, TRUE);
             }
             appendTac(postIfBlock, endIfLabel);
         }
-        case WHILE:
+        case WHILE: {
+            BasicBlock *preWhileBlock = allocBasicBlock(),
+                       *whileBlock = allocBasicBlock(),
+                       *postWhileBlock = allocBasicBlock();
+            Tac *loopStartLabel = allocLabel(), *loopEndLabel = allocLabel(),
+                *branchIfFalse = allocTac(NULL),
+                *branchToCondition = allocTac(NULL);
+
+            branchIfFalse->op = BRANCH_FALSE;
+            branchIfFalse->dest = loopEndLabel->dest;
+
+            branchToCondition->op = BRANCH;
+            branchToCondition->dest = loopStartLabel->dest;
+
+            appendBlock(&block, preWhileBlock);
+
+            /* Structure of the loop
+                - block 0
+                Move scope down
+                Start label:
+                Calculate condition
+                If false then branch to end label
+                - block 1
+                Body of the while
+                branch back to begining
+                - block 2
+                end label:
+                Move scope up
+            */
+            moveScope(preWhileBlock, FALSE);
+            appendTac(preWhileBlock, loopStartLabel);
+            TOKEN *condition = traverse(tree->left, preWhileBlock);
+            appendTac(preWhileBlock, branchIfFalse);
+            traverse(tree->right, whileBlock);
+            appendTac(postWhileBlock, branchToCondition);
+            appendTac(postWhileBlock, loopEndLabel);
+            moveScope(postWhileBlock, TRUE);
+
+            appendBlock(&preWhileBlock, whileBlock);
+            appendBlock(&whileBlock, postWhileBlock);
+
+            branchIfFalse->src1 =
+                condition;  // Set the pointer to the condition code
             break;
+        }
         case LEAF: {
             return (TOKEN *)tree->left;
         }
-        case APPLY:
-            break;
+        case APPLY: {
+            BasicBlock *postCallBlock = allocBasicBlock();
+            TOKEN *retAddrName = (TOKEN *)malloc(sizeof(TOKEN));
+            if (retAddrName == NULL)
+                perror("Could not allocate memory in APPLY");
+            retAddrName->lexeme = (char *)"RA";
+
+            Tac *callFunc = allocTac(NULL), *decVar = allocTac(NULL),
+                *saveAddr = allocTac(NULL), *loadAddr = allocTac(NULL);
+
+            decVar->op = '~';
+            decVar->dest = retAddrName;
+            saveAddr->op = SAVE_RET_ADDR;
+            decVar->dest = retAddrName;
+
+            loadAddr->op = LOAD_RET_ADDR;
+            loadAddr->dest = retAddrName;
+            callFunc->op = APPLY;
+            callFunc->dest = (TOKEN *)tree->left->left;
+
+            // Structure:
+            // Declare return address
+            // Save return address
+            // Call function
+            // Load return address back into register
+            appendTac(block, decVar);
+            appendTac(block, saveAddr);
+            moveScope(block, FALSE);
+            appendTac(block, callFunc);
+            appendBlock(&block, postCallBlock);
+            moveScope(postCallBlock, TRUE);
+            appendTac(postCallBlock, loadAddr);
+        }
         case BREAK:
             break;
-        case RETURN:
-            break;
+        case RETURN: {
+            moveScope(block, TRUE);
+            Tac *retTac = allocTac(NULL);
+            retTac->op = RETURN;
+
+        } break;
     }
 }
 
@@ -326,6 +430,7 @@ void printToken(TOKEN *t) {
 }
 
 void printTac(BasicBlock *block) {
+    int depth = 0;
     while (block != NULL) {
         printf("-----NEW-BLOCK-----\n");
         Tac *t = block->tac;
@@ -348,6 +453,18 @@ void printTac(BasicBlock *block) {
             } else if (t->op == LABEL) {
                 printToken(t->dest);
                 printf(":");
+            } else if (t->op == SAVE_RET_ADDR) {
+                printf("---SAVE RET ADDR---");
+            } else if (t->op == LOAD_RET_ADDR) {
+                printf("---LOAD RET ADDR---");
+            } else if (t->op == RETURN) {
+                printf("return");
+            } else if (t->op == DEFINE_FUNC_START) {
+                printf("----START FUNC DEFINITION----");
+            } else if (t->op == DEFINE_FUNC_END) {
+                printf("----END FUNC DEFINITION----");
+            } else if (t->op == APPLY) {
+                printf("Call %s", t->dest->lexeme);
             } else if (t->op == '~') {
                 if (t->dest->lexeme[0] == '_') {
                     printf("~ %s%d", t->dest->lexeme, t->dest->value);
@@ -355,8 +472,10 @@ void printTac(BasicBlock *block) {
                     printf("~ %s", t->dest->lexeme);
                 }
             } else if (t->op == SCOPE_DOWN) {
+                depth++;
                 printf("---SCOPE_DOWN---");
             } else if (t->op == SCOPE_UP) {
+                depth--;
                 printf("----SCOPE_UP----");
             } else {
                 printToken(t->dest);
