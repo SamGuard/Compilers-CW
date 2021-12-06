@@ -142,12 +142,13 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case 'D': {
             BasicBlock *funcBlock = allocBasicBlock();
             Tac *funcStart = allocLabel(), *funcDefStart = allocTac(NULL),
-                *funcDefEnd = allocTac(NULL);
+                *funcDefEnd = allocTac(NULL);            
             funcDefStart->op = DEFINE_FUNC_START;
             // Function name
             funcDefStart->dest = (TOKEN *)tree->left->right->left->left;
             // Label for the function
             funcDefStart->src1 = (TOKEN *)funcStart;
+            funcStart->dest->lexeme = funcDefStart->dest->lexeme; 
 
             funcDefEnd->op = DEFINE_FUNC_END;
 
@@ -350,17 +351,20 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             if (retAddrName == NULL)
                 perror("Could not allocate memory in APPLY");
             retAddrName->lexeme = (char *)"RA";
+            retAddrName->type = IDENTIFIER;
 
             Tac *callFunc = allocTac(NULL), *decVar = allocTac(NULL),
                 *saveAddr = allocTac(NULL), *loadAddr = allocTac(NULL);
 
             decVar->op = '~';
             decVar->dest = retAddrName;
+
             saveAddr->op = SAVE_RET_ADDR;
-            decVar->dest = retAddrName;
+            saveAddr->dest = retAddrName;
 
             loadAddr->op = LOAD_RET_ADDR;
             loadAddr->dest = retAddrName;
+
             callFunc->op = APPLY;
             callFunc->dest = (TOKEN *)tree->left->left;
 
@@ -383,6 +387,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             moveScope(block, TRUE);
             Tac *retTac = allocTac(NULL);
             retTac->op = RETURN;
+            appendTac(block, retTac);
 
         } break;
     }

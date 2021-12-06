@@ -1,7 +1,8 @@
 #include "machinecode.h"
 
-const char CODE_START[] = ".text\n.globl	main\nmain:\n";
-const char CODE_END[] = "li $v0, 10\nsyscall\n";
+const char CODE_START[] =
+    ".text\n.globl	premain\npremain:\njal main\nli $v0, 10\nsyscall\n";
+const char CODE_END[] = "";
 FILE *file;  // File to write assembly to
 
 Frame *globalFrame;
@@ -62,7 +63,6 @@ void addInstruction(Block *b, int op, Number *arg1, Number *arg2,
         }
     } else {
         i = (Inst *)malloc(sizeof(Inst));
-        ;
     }
 
     i->op = op;
@@ -275,7 +275,13 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     addInstruction(block, INS_SW, returnReg,
                                    getVarLocation(tacList->dest, block->frame),
                                    NULL);
+                    break;
                 }
+
+                case APPLY:
+                    addInstruction(block, INS_JAL, (Number *)tacList->dest,
+                                   NULL, NULL);
+                    break;
                 case RETURN: {
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
                     break;
@@ -348,36 +354,37 @@ void printNum(Frame *f, Number *n) {
 void printLabel(Number *label) {
     TOKEN *l = (TOKEN *)label;
 #if OUTPUT_MODE == 0
-    printf("%s%d:\n", l->lexeme, l->value);
+    printf("%s:\n", l->lexeme);
 #endif
 
 #if OUTPUT_MODE == 1
-    fprintf(file, "%s%d:\n", l->lexeme, l->value);
+    fprintf(file, "%s:\n", l->lexeme);
 #endif
 }
 
-void printBranch(Frame *f, Number *label, Number *val) {
+void printBranch(char *ins, Frame *f, Number *label, Number *val) {
     TOKEN *l = (TOKEN *)label;
     if (val == NULL) {
 #if OUTPUT_MODE == 0
-        printf("j %s%d\n", l->lexeme, l->value);
+        printf("%s %s\n", ins, l->lexeme);
 #endif
 #if OUTPUT_MODE == 1
-        fprintf(file, "j %s%d\n", l->lexeme, l->value);
+        fprintf(file, "%s %s\n", ins, l->lexeme);
 #endif
         return;
     }
 
 #if OUTPUT_MODE == 0
-    printf("beqz %s%d, ", l->lexeme, l->value);
+    printf("%s ", ins);
     printNum(f, val);
+    printf(", %s", l->lexeme);
     printf("\n");
 #endif
 
 #if OUTPUT_MODE == 1
-    fprintf(file, "beqz ");
+    fprintf(file, "%s ", ins);
     printNum(f, val);
-    fprintf(file, ", %s%d", l->lexeme, l->value);
+    fprintf(file, ", %s", l->lexeme);
     fprintf(file, "\n");
 #endif
 }
@@ -413,7 +420,15 @@ void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
 
 #if OUTPUT_MODE == 1
     fprintf(file, "%s ", ins);
+    if (arg1 == NULL) {
+        fprintf(file, "\n");
+        return;
+    }
     printNum(f, arg1);
+    if (arg2 == NULL) {
+        fprintf(file, "\n");
+        return;
+    }
     fprintf(file, ", ");
     printNum(f, arg2);
     if (arg3 == NULL) {
@@ -504,8 +519,15 @@ void outputCode(Block *code) {
                     currFrame = currFrame->next;
                     break;
                 case INS_JMP:
+                    printBranch("j", currFrame, i->arg1, i->arg2);
                 case INS_BZE:
-                    printBranch(currFrame, i->arg1, i->arg2);
+                    printBranch("beqz", currFrame, i->arg1, i->arg2);
+                    break;
+                case INS_JAL:
+                    printBranch("jal", currFrame, i->arg1, NULL);
+                    break;
+                case INS_JPR:
+                    printInstruction("jr $ra", currFrame, NULL, NULL, NULL);
                     break;
             }
             i = i->next;

@@ -6,4 +6,5 @@ int get1(){
 int main(){
   int a = 2;
   get1();
+  return a;
 }
