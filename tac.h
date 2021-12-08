@@ -16,6 +16,8 @@
 #define SAVE_RET_ADDR 286
 #define LOAD_RET_ADDR 287
 
+#define LOAD_RET_VAL 288
+
 
 typedef struct Tac {
     int op;

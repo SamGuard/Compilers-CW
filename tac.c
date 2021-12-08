@@ -127,7 +127,9 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
     Tac *t = allocTemp(block);
     t->op = op;
     t->src1 = traverse(tree->left, block);
+    moveToFrontBlock(&block);
     t->src2 = traverse(tree->right, block);
+    moveToFrontBlock(&block);
     appendTac(block, t);
     return t;
 }
@@ -142,13 +144,15 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case 'D': {
             BasicBlock *funcBlock = allocBasicBlock();
             Tac *funcStart = allocLabel(), *funcDefStart = allocTac(NULL),
-                *funcDefEnd = allocTac(NULL);            
+                *funcDefEnd = allocTac(NULL);
             funcDefStart->op = DEFINE_FUNC_START;
             // Function name
             funcDefStart->dest = (TOKEN *)tree->left->right->left->left;
+            funcDefStart->dest->value = -1;
             // Label for the function
             funcDefStart->src1 = (TOKEN *)funcStart;
-            funcStart->dest->lexeme = funcDefStart->dest->lexeme; 
+            funcStart->dest->lexeme = funcDefStart->dest->lexeme;
+            funcStart->dest->value = -1;
 
             funcDefEnd->op = DEFINE_FUNC_END;
 
@@ -190,6 +194,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             Tac *t = allocTac((TOKEN *)tree->left->left);
             t->op = '=';
             t->src1 = traverse(tree->right, block);
+            moveToFrontBlock(&block);
             appendTac(block, t);
             return t->dest;
         }
@@ -223,7 +228,9 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             Tac *t = allocTemp(block);
             t->op = LE_OP;
             t->src2 = traverse(tree->left, block);
+            moveToFrontBlock(&block);
             t->src1 = traverse(tree->right, block);
+            moveToFrontBlock(&block);
             appendTac(block, t);
             return t->dest;
         }
@@ -296,6 +303,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 moveScope(ifBlock, TRUE);
             }
             appendTac(postIfBlock, endIfLabel);
+            break;
         }
         case WHILE: {
             BasicBlock *preWhileBlock = allocBasicBlock(),
@@ -354,7 +362,8 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             retAddrName->type = IDENTIFIER;
 
             Tac *callFunc = allocTac(NULL), *decVar = allocTac(NULL),
-                *saveAddr = allocTac(NULL), *loadAddr = allocTac(NULL);
+                *saveAddr = allocTac(NULL), *loadAddr = allocTac(NULL),
+                *loadVal = allocTac(NULL), *returnValue = allocTemp(block);
 
             decVar->op = '~';
             decVar->dest = retAddrName;
@@ -365,21 +374,28 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             loadAddr->op = LOAD_RET_ADDR;
             loadAddr->dest = retAddrName;
 
+            loadVal->op = LOAD_RET_VAL;
+            loadVal->dest = returnValue->dest;
+
             callFunc->op = APPLY;
             callFunc->dest = (TOKEN *)tree->left->left;
 
             // Structure:
+            // Declare return value
             // Declare return address
             // Save return address
             // Call function
+            // Load return value
             // Load return address back into register
             appendTac(block, decVar);
             appendTac(block, saveAddr);
             moveScope(block, FALSE);
             appendTac(block, callFunc);
             appendBlock(&block, postCallBlock);
+            appendTac(block, loadVal);
             moveScope(postCallBlock, TRUE);
             appendTac(postCallBlock, loadAddr);
+            return returnValue->dest;
         }
         case BREAK:
             break;
@@ -388,8 +404,8 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             Tac *retTac = allocTac(NULL);
             retTac->op = RETURN;
             appendTac(block, retTac);
-
-        } break;
+            break;
+        }
     }
 }
 
@@ -440,56 +456,71 @@ void printTac(BasicBlock *block) {
         printf("-----NEW-BLOCK-----\n");
         Tac *t = block->tac;
         while (t != NULL) {
-            if (t->op == 'H') {
-                t = t->next;
-                continue;
-            }
-            if (t->op == BRANCH) {
-                printf("BRANCH ");
-                printToken(t->dest);
-            } else if (t->op == BRANCH_FALSE || t->op == BRANCH_TRUE) {
-                printf("BRANCH ");
-                printOP(t->op);
-                printf("(");
-                printToken(t->src1);
-                printf(")");
-                printf("->");
-                printToken(t->dest);
-            } else if (t->op == LABEL) {
-                printToken(t->dest);
-                printf(":");
-            } else if (t->op == SAVE_RET_ADDR) {
-                printf("---SAVE RET ADDR---");
-            } else if (t->op == LOAD_RET_ADDR) {
-                printf("---LOAD RET ADDR---");
-            } else if (t->op == RETURN) {
-                printf("return");
-            } else if (t->op == DEFINE_FUNC_START) {
-                printf("----START FUNC DEFINITION----");
-            } else if (t->op == DEFINE_FUNC_END) {
-                printf("----END FUNC DEFINITION----");
-            } else if (t->op == APPLY) {
-                printf("Call %s", t->dest->lexeme);
-            } else if (t->op == '~') {
-                if (t->dest->lexeme[0] == '_') {
-                    printf("~ %s%d", t->dest->lexeme, t->dest->value);
-                } else {
-                    printf("~ %s", t->dest->lexeme);
-                }
-            } else if (t->op == SCOPE_DOWN) {
-                depth++;
-                printf("---SCOPE_DOWN---");
-            } else if (t->op == SCOPE_UP) {
-                depth--;
-                printf("----SCOPE_UP----");
-            } else {
-                printToken(t->dest);
-                printf("=");
-                printToken(t->src1);
-                if (t->op != '=' && t->src2 != NULL) {
+            switch (t->op) {
+                case 'H':
+                    t = t->next;
+                    continue;
+                case BRANCH:
+                    printf("BRANCH ");
+                    printToken(t->dest);
+                    break;
+                case BRANCH_FALSE:
+                case BRANCH_TRUE:
+                    printf("BRANCH ");
                     printOP(t->op);
-                    printToken(t->src2);
-                }
+                    printf("(");
+                    printToken(t->src1);
+                    printf(")");
+                    printf("->");
+                    printToken(t->dest);
+                    break;
+                case LABEL:
+                    printToken(t->dest);
+                    printf(":");
+                    break;
+                case SAVE_RET_ADDR:
+                    printf("---SAVE RET ADDR---");
+                    break;
+                case LOAD_RET_ADDR:
+                    printf("---LOAD RET ADDR---");
+                    break;
+                case LOAD_RET_VAL:
+                    printf("%s = RETURN VALUE", t->dest->lexeme);
+                    break;
+                case RETURN:
+                    printf("return");
+                    break;
+                case DEFINE_FUNC_START:
+                    printf("----START FUNC DEFINITION----");
+                    break;
+                case DEFINE_FUNC_END:
+                    printf("----END FUNC DEFINITION----");
+                    break;
+                case APPLY:
+                    printf("Call %s", t->dest->lexeme);
+                    break;
+                case '~':
+                    if (t->dest->lexeme[0] == '_') {
+                        printf("~ %s%d", t->dest->lexeme, t->dest->value);
+                    } else {
+                        printf("~ %s", t->dest->lexeme);
+                    }
+                    break;
+                case SCOPE_DOWN:
+                    printf("---SCOPE_DOWN---");
+                    break;
+                case SCOPE_UP:
+                    printf("----SCOPE_UP----");
+                    break;
+                default:
+                    printToken(t->dest);
+                    printf("=");
+                    printToken(t->src1);
+                    if (t->op != '=' && t->src2 != NULL) {
+                        printOP(t->op);
+                        printToken(t->src2);
+                    }
+                    break;
             }
             printf("\n");
             t = t->next;

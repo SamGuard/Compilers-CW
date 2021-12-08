@@ -33,9 +33,11 @@
 #define INS_SPD 518 // Decrease stack pointer
 #define INS_SPU 519 // Increment stack pointer
 
+#define REG_RET 2
 #define REG_T_START 8  // Which register is the start of the temp registers
-#define REG_RA 31
 #define REG_SP 29      // Which register holds the stack pointer
+#define REG_RA 31
+
 
 #define ADDR_IMM 1  // Immediate addressing
 #define ADDR_REG 2  // Register addressing

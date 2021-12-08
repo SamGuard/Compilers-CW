@@ -1,7 +1,9 @@
 #include "machinecode.h"
 
 const char CODE_START[] =
-    ".text\n.globl	premain\npremain:\njal main\nli $v0, 10\nsyscall\n";
+    ".data\nargs .space 128 # Allocate 128 bytes for "
+    "arguemnts\n.text\n.globl	premain\npremain:\njal main\nli $v0, "
+    "10\nsyscall\n";
 const char CODE_END[] = "";
 FILE *file;  // File to write assembly to
 
@@ -163,6 +165,8 @@ void setRegister(TOKEN *src, Block *b, Number *destReg) {
     }
 }
 
+void setValue() {}
+
 void mathToInstruction(Block *b, int op, Tac *tac) {
     // regA, regB are used to store the two argument IF necessary. They are
     // used to store values from memory, they are not used for immediate values
@@ -201,7 +205,6 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case '=': {  // Set a memory location to a value
-
                     Number *destReg = newNum(ADDR_REG, REG_T_START, NULL),
                            *destMem =
                                getVarLocation(tacList->dest, block->frame);
@@ -286,6 +289,13 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
                     break;
                 }
+                case LOAD_RET_VAL: {
+                    Number *val = newNum(ADDR_REG, REG_RET, NULL),
+                           *memLoc =
+                               getVarLocation(tacList->dest, block->frame);
+                    addInstruction(block, INS_SW, val, memLoc, NULL);
+                    break;
+                }
             }
             tacList = tacList->next;
         }
@@ -317,23 +327,6 @@ int calcVariableOffset(Frame *f, Number *n) {
 }
 
 void printNum(Frame *f, Number *n) {
-#if OUTPUT_MODE == 0
-    switch (n->addrMode) {
-        case ADDR_REG:
-            printf("$");
-            printf("%d", n->value);
-            break;
-        case ADDR_IMM:
-            printf("%d", n->value);
-            break;
-        case ADDR_BAS:
-            printf("%d(", calcVariableOffset(f, n));
-            printNum(f, n->base);
-            printf(")");
-            break;
-    }
-#endif
-#if OUTPUT_MODE == 1
     switch (n->addrMode) {
         case ADDR_REG:
             fprintf(file, "$");
@@ -348,45 +341,31 @@ void printNum(Frame *f, Number *n) {
             fprintf(file, ")");
             break;
     }
-#endif
 }
 
 void printLabel(Number *label) {
     TOKEN *l = (TOKEN *)label;
-#if OUTPUT_MODE == 0
-    printf("%s:\n", l->lexeme);
-#endif
 
-#if OUTPUT_MODE == 1
-    fprintf(file, "%s:\n", l->lexeme);
-#endif
+    if (l->value != -1) {
+        fprintf(file, "%s%d", l->lexeme, l->value);
+    } else {
+        fprintf(file, "%s", l->lexeme);
+    }
 }
 
 void printBranch(char *ins, Frame *f, Number *label, Number *val) {
     TOKEN *l = (TOKEN *)label;
     if (val == NULL) {
-#if OUTPUT_MODE == 0
-        printf("%s %s\n", ins, l->lexeme);
-#endif
-#if OUTPUT_MODE == 1
-        fprintf(file, "%s %s\n", ins, l->lexeme);
-#endif
+        fprintf(file, "%s ", ins);
+        printLabel(label);
+        fprintf(file, "\n");
         return;
     }
-
-#if OUTPUT_MODE == 0
-    printf("%s ", ins);
-    printNum(f, val);
-    printf(", %s", l->lexeme);
-    printf("\n");
-#endif
-
-#if OUTPUT_MODE == 1
     fprintf(file, "%s ", ins);
     printNum(f, val);
-    fprintf(file, ", %s", l->lexeme);
+    fprintf(file, ", ");
+    printLabel(label);
     fprintf(file, "\n");
-#endif
 }
 
 void printMoveStack(int bytesToMove) {
@@ -400,25 +379,6 @@ void printMoveStack(int bytesToMove) {
 
 void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
                       Number *arg3) {
-#if OUTPUT_MODE == 0
-    printf("%s ", ins);
-    printNum(f, arg1);
-    if (arg2 == NULL) {
-        printf("\n");
-        return;
-    }
-    printf(", ");
-    printNum(f, arg2);
-    if (arg3 == NULL) {
-        printf("\n");
-        return;
-    }
-    printf(", ");
-    printNum(f, arg3);
-    printf("\n");
-#endif
-
-#if OUTPUT_MODE == 1
     fprintf(file, "%s ", ins);
     if (arg1 == NULL) {
         fprintf(file, "\n");
@@ -438,40 +398,21 @@ void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
     fprintf(file, ", ");
     printNum(f, arg3);
     fprintf(file, "\n");
-#endif
 }
 
 void printIndent(unsigned int depth) {
     for (int i = 0; i < depth; i++) {
-#if OUTPUT_MODE == 0
-        printf("    ");
-#endif
-#if OUTPUT_MODE == 1
         fprintf(file, "   ");
-#endif
     }
 }
 
 // Pritning goes here
 void outputCode(Block *code) {
     unsigned int depth = 0;
-#if OUTPUT_MODE == 0
-    printf("\n%s", CODE_START);
-#endif
-#if OUTPUT_MODE == 1
     file = fopen("./outputs/out.asm", "w");
     fprintf(file, CODE_START);
-#endif
 
     while (code != NULL) {
-#if OUTPUT_MODE == 0
-        printf("addi $sp, $sp, %d\n", -1 * WORD_SIZE * code->frame->frameSize);
-#endif
-#if OUTPUT_MODE == 1
-        fprintf(file, "addi $sp, $sp, %d\n",
-                -1 * WORD_SIZE * code->frame->frameSize);
-#endif
-
         Frame *currFrame = code->frame;
         Inst *i = code->head;
         while (i != NULL) {
@@ -504,6 +445,7 @@ void outputCode(Block *code) {
                     break;
                 case LABEL:
                     printLabel(i->arg1);
+                    fprintf(file, ":\n");
                     break;
                 case INS_SPD:
                     depth++;
@@ -520,6 +462,7 @@ void outputCode(Block *code) {
                     break;
                 case INS_JMP:
                     printBranch("j", currFrame, i->arg1, i->arg2);
+                    break;
                 case INS_BZE:
                     printBranch("beqz", currFrame, i->arg1, i->arg2);
                     break;
@@ -532,21 +475,10 @@ void outputCode(Block *code) {
             }
             i = i->next;
         }
-#if OUTPUT_MODE == 0
-        printf("addi $sp, $sp, %d\n", code->frame->frameSize);
-#endif
-#if OUTPUT_MODE == 1
-        fprintf(file, "addi $sp, $sp, %d\n", code->frame->frameSize);
-#endif
         code = code->next;
     }
-#if OUTPUT_MODE == 0
-    printf(CODE_END);
-#endif
-#if OUTPUT_MODE == 1
     fprintf(file, CODE_END);
     fclose(file);
-#endif
 }
 
 // ------------------------------PRINTING-------------------
