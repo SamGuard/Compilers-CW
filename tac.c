@@ -392,7 +392,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             moveScope(block, FALSE);
             appendTac(block, callFunc);
             appendBlock(&block, postCallBlock);
-            appendTac(block, loadVal);
+            appendTac(postCallBlock, loadVal);
             moveScope(postCallBlock, TRUE);
             appendTac(postCallBlock, loadAddr);
             return returnValue->dest;
@@ -400,6 +400,11 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case BREAK:
             break;
         case RETURN: {
+            Tac *storeReturnVal = allocTac(NULL);
+            storeReturnVal->op = SAVE_RET_VAL;
+            storeReturnVal->dest = traverse(tree->left, block);
+            moveToFrontBlock(&block);
+            appendTac(block, storeReturnVal);
             moveScope(block, TRUE);
             Tac *retTac = allocTac(NULL);
             retTac->op = RETURN;
@@ -484,8 +489,13 @@ void printTac(BasicBlock *block) {
                 case LOAD_RET_ADDR:
                     printf("---LOAD RET ADDR---");
                     break;
+                case SAVE_RET_VAL:
+                    printf("RETURN VALUE = ");
+                    printToken(t->dest);
+                    break;
                 case LOAD_RET_VAL:
-                    printf("%s = RETURN VALUE", t->dest->lexeme);
+                    printToken(t->dest);
+                    printf(" = RETURN VALUE");
                     break;
                 case RETURN:
                     printf("return");

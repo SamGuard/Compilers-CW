@@ -1,9 +1,14 @@
 #include "machinecode.h"
 
 const char CODE_START[] =
-    ".data\nargs .space 128 # Allocate 128 bytes for "
-    "arguemnts\n.text\n.globl	premain\npremain:\njal main\nli $v0, "
-    "10\nsyscall\n";
+    ".data\n"
+    "args: .space 128 # Allocate 128 bytes for arguemnts\n"
+    ".text\n"
+    ".globl	premain\n"
+    "premain:\n"
+    "jal main\n"
+    "li $v0, 10\n"
+    "syscall\n";
 const char CODE_END[] = "";
 FILE *file;  // File to write assembly to
 
@@ -268,6 +273,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     block->frame = block->frame->next;
                     break;
                 }
+                // RETURN ADDRESS
                 case LOAD_RET_ADDR: {
                     Number *returnReg = newNum(ADDR_REG, REG_RA, NULL);
                     getOperatorArg(tacList->dest, block, returnReg);
@@ -280,20 +286,25 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                                    NULL);
                     break;
                 }
-
+                // RETURN ADDRESS
+                case LOAD_RET_VAL: {
+                    Number *val = newNum(ADDR_REG, REG_RET, NULL),
+                           *memLoc =
+                               getVarLocation(tacList->dest, block->frame);
+                    addInstruction(block, INS_SW, val, memLoc, NULL);
+                    break;
+                }
+                case SAVE_RET_VAL: {
+                    Number *val = newNum(ADDR_REG, REG_RET, NULL);
+                    getOperatorArg(tacList->dest, block, val);
+                    break;
+                }
                 case APPLY:
                     addInstruction(block, INS_JAL, (Number *)tacList->dest,
                                    NULL, NULL);
                     break;
                 case RETURN: {
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
-                    break;
-                }
-                case LOAD_RET_VAL: {
-                    Number *val = newNum(ADDR_REG, REG_RET, NULL),
-                           *memLoc =
-                               getVarLocation(tacList->dest, block->frame);
-                    addInstruction(block, INS_SW, val, memLoc, NULL);
                     break;
                 }
             }
