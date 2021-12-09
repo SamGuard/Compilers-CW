@@ -134,8 +134,64 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
     return t;
 }
 
+
+void declareArgs(NODE *tree, BasicBlock *block, int argNum){
+    switch (tree->type) {
+        default:
+            printf("op: %c\n", tree->type);
+            perror("Invalid token in parameter definition");
+        case VOID:
+            return;
+        case ',':
+            declareArgs(tree->left, block, argNum + 1);
+            moveToFrontBlock(&block);
+            tree = tree->right;
+        case LEAF:{
+            TOKEN* dest = (TOKEN *)malloc(sizeof(TOKEN));
+            if(dest == NULL) perror("Could not allocate in declare args");
+            dest->lexeme = NULL;
+            dest->type = CONSTANT;
+            dest->value = argNum;
+            Tac *arg = allocTac(dest);
+            arg->op = DEC_ARG;
+            arg->src1 = traverse(tree, block);
+            moveToFrontBlock(&block);
+            appendTac(block, arg);
+            break;
+        }          
+    }
+
+}
+
+void defineParams(NODE* tree, BasicBlock *block, int argNum){
+    if(tree == NULL) return;
+    switch (tree->type) {
+        default:
+            perror("Invalid type in defineParams");
+        case VOID:
+            return;
+        case ',':
+            defineParams(tree->left, block, argNum + 1);
+            moveToFrontBlock(&block);
+        case '~':{
+            TOKEN* dest = (TOKEN *)malloc(sizeof(TOKEN));
+            if(dest == NULL) perror("Could not allocate in declare args");
+            dest->lexeme = NULL;
+            dest->type = CONSTANT;
+            dest->value = argNum;
+            Tac *arg = allocTac(dest);
+            arg->op = DEF_PARAM;
+            arg->src1 = (TOKEN *)tree->right->left;
+            appendTac(block, arg);
+            break;
+        }
+
+    }
+}
+
 TOKEN *traverse(NODE *tree, BasicBlock *block) {
     Tac **prev = &block->tail;  // Previous tac to append onto
+    //printf("%c\n", tree->type);
     switch (tree->type) {
         default:
             perror("unexpected type");
@@ -161,16 +217,25 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             appendTac(funcBlock, funcDefStart);
             appendTac(funcBlock, funcStart);
             moveScope(funcBlock, FALSE);
+            defineParams(tree->left->right->right, funcBlock, 0);
+            moveToFrontBlock(&funcBlock);
             traverse(tree->right, funcBlock);
             moveToFrontBlock(&funcBlock);
             appendTac(funcBlock, funcDefEnd);
             break;
         }
         case ';':
-            traverse(tree->left, block);
-            moveToFrontBlock(&block);
-            traverse(tree->right, block);
-            return 0;
+            if (tree->right != NULL) {
+                traverse(tree->left, block);
+                moveToFrontBlock(&block);
+                traverse(tree->right, block);
+                return 0;
+            } else {
+                traverse(tree->left, block);
+                moveToFrontBlock(&block);
+                return 0;
+            }
+
         case '~': {
             if (tree->left->type == LEAF) {
                 Tac *t;
@@ -353,7 +418,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case LEAF: {
             return (TOKEN *)tree->left;
         }
-        case APPLY: {
+        case APPLY: {   
             BasicBlock *postCallBlock = allocBasicBlock();
             TOKEN *retAddrName = (TOKEN *)malloc(sizeof(TOKEN));
             if (retAddrName == NULL)
@@ -387,9 +452,12 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             // Call function
             // Load return value
             // Load return address back into register
+            moveToFrontBlock(&block);
             appendTac(block, decVar);
             appendTac(block, saveAddr);
             moveScope(block, FALSE);
+            declareArgs(tree->right, block, 0);
+            moveToFrontBlock(&block);
             appendTac(block, callFunc);
             appendBlock(&block, postCallBlock);
             appendTac(postCallBlock, loadVal);
@@ -505,6 +573,14 @@ void printTac(BasicBlock *block) {
                     break;
                 case DEFINE_FUNC_END:
                     printf("----END FUNC DEFINITION----");
+                    break;
+                case DEC_ARG:
+                    printf("~ ARG %d ", t->dest->value);
+                    printToken(t->src1);
+                    break;
+                case DEF_PARAM:
+                    printf("~ PARAM %d ", t->dest->value);
+                    printToken(t->src1);
                     break;
                 case APPLY:
                     printf("Call %s", t->dest->lexeme);

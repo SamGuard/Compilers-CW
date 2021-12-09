@@ -19,6 +19,8 @@
 #define SAVE_RET_VAL 288
 #define LOAD_RET_VAL 289
 
+#define DEC_ARG 290
+#define DEF_PARAM 291
 
 typedef struct Tac {
     int op;
@@ -28,11 +30,12 @@ typedef struct Tac {
     struct Tac *next;
 } Tac;
 
-typedef struct BasicBlock{
+typedef struct BasicBlock {
     unsigned int size;
     Tac *tac, *tail;
     struct BasicBlock *next;
-}BasicBlock;
+} BasicBlock;
 
+void declareArgs(NODE *tree, BasicBlock *block, int argNum);
 BasicBlock *toTac(NODE *tree);
 #endif
