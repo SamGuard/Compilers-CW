@@ -10,6 +10,8 @@ const char CODE_START[] =
     "li $v0, 10\n"
     "syscall\n";
 const char CODE_END[] = "";
+
+const char *ARGS_IDENT = "args";
 FILE *file;  // File to write assembly to
 
 Frame *globalFrame;
@@ -132,7 +134,7 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
 
     if (f->next == NULL) {
         perror("Variable not declared");
-        return (void *)0;
+        return newNum(ADDR_IMM, 0, NULL);
     }
     Number *n = getVarLocation(var, f->next);
     n->framesBack++;
@@ -142,7 +144,7 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
 // Returns a Number which is either immediate or register address
 // Adds instruction to load value to register if needed
 // Reg is the number to use to store the value in if needed
-Number *getOperatorArg(TOKEN *src, Block *b, Number *reg) {
+Number *getArg(TOKEN *src, Block *b, Number *reg) {
     Number *n;
     if (src->type == CONSTANT) {
         n = newNum(ADDR_IMM, src->value, NULL);
@@ -151,7 +153,7 @@ Number *getOperatorArg(TOKEN *src, Block *b, Number *reg) {
         Number *memLocation = getVarLocation(src, b->frame);
         addInstruction(b, INS_LW, reg, memLocation, NULL);
     } else {
-        printf("Invalid type in getOperatorArg\n");
+        printf("Invalid type in getArg\n");
     }
     return n;
 }
@@ -164,7 +166,7 @@ void setRegister(TOKEN *src, Block *b, Number *destReg) {
             *val = newNum(ADDR_IMM, src->value, NULL);
         addInstruction(b, INS_ADD, destReg, zeroReg, val);
     } else if (src->type == IDENTIFIER) {
-        getOperatorArg(src, b, destReg);
+        getArg(src, b, destReg);
     } else {
         printf("Invalid type in setRegister %d\n", src->type);
     }
@@ -182,8 +184,8 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
            *regB = newNum(ADDR_REG, REG_T_START + 1, NULL),
            *regC = newNum(ADDR_REG, REG_T_START + 2, NULL),
            *dest = getVarLocation(tac->dest, b->frame),
-           *num1 = getOperatorArg(tac->src1, b, regA),
-           *num2 = getOperatorArg(tac->src2, b, regB);
+           *num1 = getArg(tac->src1, b, regA),
+           *num2 = getArg(tac->src2, b, regB);
 
     if ((op == '<' || op == EQ_OP) && num1->addrMode == ADDR_IMM) {
         num1 = regA;
@@ -250,7 +252,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     // Branch if the value is 0
                     // Register to load value into
                     Number *reg = newNum(ADDR_REG, REG_T_START, NULL);
-                    Number *value = getOperatorArg(tacList->src1, block, reg);
+                    Number *value = getArg(tacList->src1, block, reg);
                     addInstruction(block, INS_BZE, (Number *)tacList->dest,
                                    value, NULL);
                     break;
@@ -276,7 +278,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 // RETURN ADDRESS
                 case LOAD_RET_ADDR: {
                     Number *returnReg = newNum(ADDR_REG, REG_RA, NULL);
-                    getOperatorArg(tacList->dest, block, returnReg);
+                    getArg(tacList->dest, block, returnReg);
                     break;
                 }
                 case SAVE_RET_ADDR: {
@@ -296,7 +298,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 }
                 case SAVE_RET_VAL: {
                     Number *val = newNum(ADDR_REG, REG_RET, NULL);
-                    getOperatorArg(tacList->dest, block, val);
+                    getArg(tacList->dest, block, val);
                     break;
                 }
                 case APPLY:
@@ -305,6 +307,49 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 case RETURN: {
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
+                    break;
+                }
+                case DEC_ARG: {
+                    // Load the value of args into reg t0
+                    Number *argsAddress =
+                               newNum(ADDR_IDT, 0, (Number *)(ARGS_IDENT)),
+                           *argsAddrReg = newNum(ADDR_REG, REG_T_START, NULL);
+
+                    addInstruction(block, INS_LA, argsAddrReg, argsAddress,
+                                   NULL);
+
+                    // Put arg value in register
+                    Number *varReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
+                    Number *var = getArg(tacList->src1, block, varReg);
+
+                    Number *addrRegPlusOff =
+                        newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
+
+                    addInstruction(block, INS_SW, var, addrRegPlusOff, NULL);
+                    break;
+                }
+                case DEF_PARAM: {
+
+                    declare(tacList->src1, block->frame);
+
+                    // Load the value of args into reg t0
+                    Number *argsAddress =
+                               newNum(ADDR_IDT, 0, (Number *)(ARGS_IDENT)),
+                           *argsAddrReg = newNum(ADDR_REG, REG_T_START, NULL);
+
+                    addInstruction(block, INS_LA, argsAddrReg, argsAddress,
+                                   NULL);
+
+                    // Move value to register
+                    Number *valReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
+                    Number *addrRegPlusOff =
+                        newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
+
+                    addInstruction(block, INS_LW, valReg, addrRegPlusOff, NULL);
+                    getVarLocation(tacList->src1, block->frame);
+                    Number *paramLoc = getVarLocation(tacList->src1, block->frame);
+                    
+                    addInstruction(block, INS_SW, valReg, paramLoc, NULL);
                     break;
                 }
             }
@@ -339,6 +384,9 @@ int calcVariableOffset(Frame *f, Number *n) {
 
 void printNum(Frame *f, Number *n) {
     switch (n->addrMode) {
+        default:
+            printf("invalid address mode\n");
+            return;
         case ADDR_REG:
             fprintf(file, "$");
             fprintf(file, "%d", n->value);
@@ -346,10 +394,18 @@ void printNum(Frame *f, Number *n) {
         case ADDR_IMM:
             fprintf(file, "%d", n->value);
             break;
-        case ADDR_BAS:
-            fprintf(file, "%d(", calcVariableOffset(f, n));
+        case ADDR_BAS: {
+            Number *base = n->base;
+            if (base->addrMode == ADDR_REG && base->value == REG_SP)
+                fprintf(file, "%d(", calcVariableOffset(f, n));
+            else
+                fprintf(file, "%d(", n->value);
             printNum(f, n->base);
             fprintf(file, ")");
+            break;
+        }
+        case ADDR_IDT:
+            fprintf(file, "%s", (char *)n->base);
             break;
     }
 }
@@ -437,6 +493,9 @@ void outputCode(Block *code) {
                     break;
                 case INS_LW:
                     printInstruction("lw", currFrame, i->arg1, i->arg2, NULL);
+                    break;
+                case INS_LA:
+                    printInstruction("la", currFrame, i->arg1, i->arg2, NULL);
                     break;
                 case '+':
                     printInstruction("add", currFrame, i->arg1, i->arg2,

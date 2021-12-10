@@ -13,9 +13,9 @@
 #define MAX_ARG_SIZE 4; // Maximum amount of arguements a function can have
 
 // Memory IO
-#define INS_LW 512
-
-#define INS_SW 513
+#define INS_LW 512 // Load word
+#define INS_LA 513 // Load address
+#define INS_SW 514 // Store word
 
 // Maths and Comparison
 #define INS_ADD '+'
@@ -23,15 +23,15 @@
 #define INS_LET '<' // Less than
 
 //Branching
-#define INS_BZE 514 // Branch if 0
-#define INS_JMP 515 // Jump
-#define INS_JAL 516 // Jump and set return address
-#define INS_JPR 517 // Return from jump
+#define INS_BZE 515 // Branch if 0
+#define INS_JMP 516 // Jump
+#define INS_JAL 517 // Jump and set return address
+#define INS_JPR 518 // Return from jump
 
 // Psuedo instruction move stack pointer, frame size is only available
 // post traversal so it set in outputCode
-#define INS_SPD 518 // Decrease stack pointer
-#define INS_SPU 519 // Increment stack pointer
+#define INS_SPD 519 // Decrease stack pointer
+#define INS_SPU 520 // Increment stack pointer
 
 #define REG_RET 2
 #define REG_T_START 8  // Which register is the start of the temp registers
@@ -42,6 +42,7 @@
 #define ADDR_IMM 1  // Immediate addressing
 #define ADDR_REG 2  // Register addressing
 #define ADDR_BAS 3  // Base addressing
+#define ADDR_IDT 4  // Identifier addressing
 
 typedef struct Frame Frame;
 
