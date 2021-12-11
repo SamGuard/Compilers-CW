@@ -154,9 +154,10 @@ void declareArgs(NODE *tree, BasicBlock *block, int argNum){
             dest->value = argNum;
             Tac *arg = allocTac(dest);
             arg->op = DEC_ARG;
+            appendTac(block, arg);
             arg->src1 = traverse(tree, block);
             moveToFrontBlock(&block);
-            appendTac(block, arg);
+            
             break;
         }          
     }
