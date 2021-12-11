@@ -4,9 +4,12 @@ const char CODE_START[] =
     ".data\n"
     "args: .space 128 # Allocate 128 bytes for arguemnts\n"
     ".text\n"
-    ".globl	premain\n"
-    "premain:\n"
-    "jal main\n"
+    ".globl	main\n"
+    "main:\n"
+    "jal main0\n"
+    "add $4, $2, $0\n"
+    "li $v0, 1\n"
+    "syscall\n"
     "li $v0, 10\n"
     "syscall\n";
 const char CODE_END[] = "";
@@ -412,6 +415,11 @@ void printNum(Frame *f, Number *n) {
 
 void printLabel(Number *label) {
     TOKEN *l = (TOKEN *)label;
+
+    if(strcmp(l->lexeme, "main") == 0){
+        fprintf(file, "main0");
+        return;
+    }
 
     if (l->value != -1) {
         fprintf(file, "%s%d", l->lexeme, l->value);

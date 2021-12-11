@@ -1,9 +1,12 @@
 .data
 args: .space 128 # Allocate 128 bytes for arguemnts
 .text
-.globl	premain
-premain:
-jal main
+.globl	main
+main:
+jal main0
+add $4, $2, $0
+li $v0, 1
+syscall
 li $v0, 10
 syscall
 get1:
@@ -20,7 +23,7 @@ addi $sp, $sp, -12
    lw $2, 8($29)
    addi $sp, $sp, 12
 jr $ra 
-main:
+main0:
 addi $sp, $sp, -20
    add $8, $0, 2
    sw $8, 0($29)
