@@ -1,8 +1,13 @@
 .data
 args: .space 128 # Allocate 128 bytes for arguemnts
+func_def: .space 1024 # Allocate 1024 bytes for functions
 .text
 .globl	main
 main:
+la $t0, factorial
+sw $t0, func_def
+la $t0, main
+sw $t0, func_def
 jal main0
 add $4, $2, $0
 li $v0, 1

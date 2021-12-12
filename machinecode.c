@@ -1,18 +1,23 @@
 #include "machinecode.h"
 
-const char CODE_START[] =
+const char CODE_DATA[] =
     ".data\n"
     "args: .space 128 # Allocate 128 bytes for arguemnts\n"
+    "func_def: .space 1024 # Allocate 1024 bytes for functions\n";
+const char CODE_START[] =
     ".text\n"
     ".globl	main\n"
-    "main:\n"
+    "main:\n";
+
+const char CODE_CALL_MAIN[] = 
     "jal main0\n"
     "add $4, $2, $0\n"
     "li $v0, 1\n"
     "syscall\n"
     "li $v0, 10\n"
     "syscall\n";
-const char CODE_END[] = "";
+
+char* CODE_FUNC_DEF;
 
 const char *ARGS_IDENT = "args";
 FILE *file;  // File to write assembly to
@@ -159,7 +164,6 @@ void getArg(TOKEN *src, Block *b, Number *reg) {
     } else {
         printf("Invalid type in getArg\n");
     }
-    return n;
 }
 
 void setRegister(TOKEN *src, Block *b, Number *destReg) {
@@ -284,6 +288,12 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 case DEFINE_FUNC_START: {
                     declare(tacList->dest, block->frame);
+                    char buf[256];
+                    sprintf(buf, 
+                    "la $t0, %s\n"
+                    "sw $t0, func_def\n", 
+                    tacList->dest->lexeme);
+                    strcat(CODE_FUNC_DEF, buf);
                     Frame *funcFrame = allocFrame();
                     funcFrame->next = block->frame;
                     block->frame = funcFrame;
@@ -462,12 +472,7 @@ void printBranch(char *ins, Frame *f, Number *label, Number *val) {
 }
 
 void printMoveStack(int bytesToMove) {
-#if OUTPUT_MODE == 0
-    printf("addi $sp, $sp, %d\n", bytesToMove);
-#endif
-#if OUTPUT_MODE == 1
     fprintf(file, "addi $sp, $sp, %d\n", bytesToMove);
-#endif
 }
 
 void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
@@ -503,7 +508,10 @@ void printIndent(unsigned int depth) {
 void outputCode(Block *code) {
     unsigned int depth = 0;
     file = fopen("./outputs/out.asm", "w");
+    fprintf(file, CODE_DATA);
     fprintf(file, CODE_START);
+    fprintf(file, CODE_FUNC_DEF);
+    fprintf(file, CODE_CALL_MAIN);
 
     while (code != NULL) {
         Frame *currFrame = code->frame;
@@ -582,13 +590,15 @@ void outputCode(Block *code) {
         }
         code = code->next;
     }
-    fprintf(file, CODE_END);
+    
     fclose(file);
 }
 
 // ------------------------------PRINTING-------------------
 
 void toMachineCode(BasicBlock *tree) {
+    CODE_FUNC_DEF = (char*)malloc(4096 * sizeof(char));
+    CODE_FUNC_DEF[0] = '\0';
     Block *block = allocBlock();
     globalFrame = allocFrame();
     block->frame = globalFrame;
