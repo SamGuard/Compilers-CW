@@ -19,8 +19,9 @@
 
 // Maths and Comparison
 #define INS_ADD '+'
-#define INS_SUB '-' // 
-#define INS_LET '<' // Less than
+#define INS_SUB '-'
+#define INS_LET '<'
+#define INS_MUL '*'
 
 //Branching
 #define INS_BZE 515 // Branch if 0
@@ -32,6 +33,9 @@
 // post traversal so it set in outputCode
 #define INS_SPD 519 // Decrease stack pointer
 #define INS_SPU 520 // Increment stack pointer
+
+#define INS_MFHI 521
+#define INS_MFLO 522
 
 #define REG_RET 2
 #define REG_T_START 8  // Which register is the start of the temp registers
@@ -92,4 +96,6 @@ typedef struct Block {
 
 void outputCode(Block *code);
 void toMachineCode(BasicBlock *tree);
+void setRegister(TOKEN *src, Block *b, Number *destReg);
+void getArg(TOKEN *src, Block *b, Number *reg);
 #endif

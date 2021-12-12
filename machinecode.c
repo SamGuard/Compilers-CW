@@ -136,7 +136,7 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
     }
 
     if (f->next == NULL) {
-        perror("Variable not declared");
+        printf("Variable not declared: %s\n", var->lexeme);
         return newNum(ADDR_IMM, 0, NULL);
     }
     Number *n = getVarLocation(var, f->next);
@@ -147,10 +147,11 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
 // Returns a Number which is either immediate or register address
 // Adds instruction to load value to register if needed
 // Reg is the number to use to store the value in if needed
-Number *getArg(TOKEN *src, Block *b, Number *reg) {
+void getArg(TOKEN *src, Block *b, Number *reg) {
     Number *n;
     if (src->type == CONSTANT) {
-        n = newNum(ADDR_IMM, src->value, NULL);
+        setRegister(src, b, reg);
+        n = reg;
     } else if (src->type == IDENTIFIER) {
         n = reg;
         Number *memLocation = getVarLocation(src, b->frame);
@@ -186,16 +187,18 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
     Number *regA = newNum(ADDR_REG, REG_T_START, NULL),
            *regB = newNum(ADDR_REG, REG_T_START + 1, NULL),
            *regC = newNum(ADDR_REG, REG_T_START + 2, NULL),
-           *dest = getVarLocation(tac->dest, b->frame),
-           *num1 = getArg(tac->src1, b, regA),
-           *num2 = getArg(tac->src2, b, regB);
+           *dest = getVarLocation(tac->dest, b->frame);
+    getArg(tac->src1, b, regA);
+    getArg(tac->src2, b, regB);
 
-    if ((op == '<' || op == EQ_OP) && num1->addrMode == ADDR_IMM) {
-        num1 = regA;
-        setRegister(tac->src1, b, regA);
+    if(op == '*'){
+        addInstruction(b, op, regA, regB, NULL);
+        addInstruction(b, INS_MFLO, regC, NULL, NULL);
+        addInstruction(b, INS_SW, regC, dest, NULL);
+        return;
     }
 
-    addInstruction(b, op, regC, num1, num2);
+    addInstruction(b, op, regC, regA, regB);
     addInstruction(b, INS_SW, regC, dest, NULL);
 }
 
@@ -225,6 +228,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     addInstruction(block, INS_SW, destReg, destMem, NULL);
                     break;
                 }
+                case '*':
                 case '+':
                 case '-':
                 case EQ_OP:
@@ -247,6 +251,20 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                                    NULL);
                     break;
                 }
+                case RETURN_SCOPE: {
+                    Frame *currFrame = block->frame,
+                          *prevFrame = block->frame->next;
+                    Number *stackPointer = newNum(ADDR_REG, REG_SP, NULL);
+                    Number *frameSize;
+                    while (currFrame->next != NULL) {
+                        frameSize = newNum(
+                            ADDR_IMM, currFrame->frameSize * WORD_SIZE, NULL);
+                        addInstruction(block, INS_ADD, stackPointer,
+                                       stackPointer, frameSize);
+                        currFrame = currFrame->next;
+                    }
+                    break;
+                }
                 case BRANCH:
                     addInstruction(block, INS_JMP, (Number *)tacList->dest,
                                    NULL, NULL);
@@ -255,9 +273,9 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     // Branch if the value is 0
                     // Register to load value into
                     Number *reg = newNum(ADDR_REG, REG_T_START, NULL);
-                    Number *value = getArg(tacList->src1, block, reg);
-                    addInstruction(block, INS_BZE, (Number *)tacList->dest,
-                                   value, NULL);
+                    getArg(tacList->src1, block, reg);
+                    addInstruction(block, INS_BZE, (Number *)tacList->dest, reg,
+                                   NULL);
                     break;
                 }
                 case LABEL:
@@ -323,16 +341,15 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
 
                     // Put arg value in register
                     Number *varReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
-                    Number *var = getArg(tacList->src1, block, varReg);
+                    getArg(tacList->src1, block, varReg);
 
                     Number *addrRegPlusOff =
                         newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
 
-                    addInstruction(block, INS_SW, var, addrRegPlusOff, NULL);
+                    addInstruction(block, INS_SW, varReg, addrRegPlusOff, NULL);
                     break;
                 }
                 case DEF_PARAM: {
-
                     declare(tacList->src1, block->frame);
 
                     // Load the value of args into reg t0
@@ -350,8 +367,9 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
 
                     addInstruction(block, INS_LW, valReg, addrRegPlusOff, NULL);
                     getVarLocation(tacList->src1, block->frame);
-                    Number *paramLoc = getVarLocation(tacList->src1, block->frame);
-                    
+                    Number *paramLoc =
+                        getVarLocation(tacList->src1, block->frame);
+
                     addInstruction(block, INS_SW, valReg, paramLoc, NULL);
                     break;
                 }
@@ -416,7 +434,7 @@ void printNum(Frame *f, Number *n) {
 void printLabel(Number *label) {
     TOKEN *l = (TOKEN *)label;
 
-    if(strcmp(l->lexeme, "main") == 0){
+    if (strcmp(l->lexeme, "main") == 0) {
         fprintf(file, "main0");
         return;
     }
@@ -491,7 +509,7 @@ void outputCode(Block *code) {
         Frame *currFrame = code->frame;
         Inst *i = code->head;
         while (i != NULL) {
-            printIndent(depth);
+            // printIndent(depth);
             switch (i->op) {
                 default:
                     perror("Invalid instruction");
@@ -520,6 +538,15 @@ void outputCode(Block *code) {
                 case '<':
                     printInstruction("slt", currFrame, i->arg1, i->arg2,
                                      i->arg3);
+                    break;
+                case '*':
+                    printInstruction("mult", currFrame, i->arg1, i->arg2, NULL);
+                    break;
+                case INS_MFHI:
+                    printInstruction("mfhi", currFrame, i->arg1, NULL, NULL);
+                    break;
+                case INS_MFLO:
+                    printInstruction("mflo", currFrame, i->arg1, NULL, NULL);
                     break;
                 case LABEL:
                     printLabel(i->arg1);

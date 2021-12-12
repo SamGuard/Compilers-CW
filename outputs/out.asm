@@ -9,51 +9,65 @@ li $v0, 1
 syscall
 li $v0, 10
 syscall
-recurse:
-addi $sp, $sp, -12
-   la $8, args
-   lw $9, 0($8)
-   sw $9, 0($29)
-   add $8, $0, 0
-   sw $8, 4($29)
-   lw $9, 0($29)
-   add $8, $0, 1
-   slt $10, $8, $9
-   sw $10, 8($29)
-   lw $8, 8($29)
-   beqz $8, _L1
-   addi $sp, $sp, -12
-      sw $31, 8($29)
-      addi $sp, $sp, 0
-         jal recurse
-         _L1:
-         sw $2, 4($29)
-         addi $sp, $sp, 0
-      lw $31, 8($29)
-      lw $8, 4($29)
-      add $10, $8, 1
-      sw $10, 0($29)
-      lw $8, 0($29)
-      sw $8, 16($29)
-      addi $sp, $sp, 12
-   lw $2, 4($29)
-   addi $sp, $sp, 12
+factorial:
+addi $sp, $sp, -8
+la $8, args
+lw $9, 0($8)
+sw $9, 0($29)
+lw $8, 0($29)
+add $9, $0, 0
+seq $10, $8, $9
+sw $10, 4($29)
+lw $8, 4($29)
+beqz $8, _L2
+addi $sp, $sp, 0
+add $2, $0, 1
+add $29, $29, 0
+add $29, $29, 8
+add $29, $29, 0
 jr $ra 
+addi $sp, $sp, 0
+j _L1
+_L2:
+addi $sp, $sp, -12
+sw $31, 8($29)
+addi $sp, $sp, -4
+lw $8, 16($29)
+add $9, $0, 1
+sub $10, $8, $9
+sw $10, 0($29)
+la $8, args
+lw $9, 0($29)
+sw $9, 0($8)
+jal factorial
+sw $2, 8($29)
+addi $sp, $sp, 4
+lw $31, 8($29)
+lw $8, 12($29)
+lw $9, 4($29)
+mult $8, $9
+mflo $10
+sw $10, 0($29)
+lw $2, 0($29)
+add $29, $29, 12
+add $29, $29, 8
+add $29, $29, 0
+jr $ra 
+addi $sp, $sp, 12
+_L1:
 main0:
-addi $sp, $sp, -16
-   add $8, $0, 5
-   sw $8, 0($29)
-   sw $31, 12($29)
-   addi $sp, $sp, 0
-      la $8, args
-      lw $9, 0($29)
-      sw $9, 0($8)
-      jal recurse
-      sw $2, 8($29)
-      addi $sp, $sp, 0
-   lw $31, 12($29)
-   lw $8, 8($29)
-   sw $8, 4($29)
-   lw $2, 4($29)
-   addi $sp, $sp, 16
+addi $sp, $sp, -8
+sw $31, 4($29)
+addi $sp, $sp, 0
+la $8, args
+add $9, $0, 10
+sw $9, 0($8)
+jal factorial
+sw $2, 0($29)
+addi $sp, $sp, 0
+lw $31, 4($29)
+lw $2, 0($29)
+add $29, $29, 8
+add $29, $29, 0
+add $29, $29, 4
 jr $ra 

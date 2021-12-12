@@ -1,9 +1,5 @@
 #include "Tac.h"
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-
 #define VERBOSE
 
 int tempCounter = 0;
@@ -134,49 +130,43 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
     return t;
 }
 
-
-void declareArgs(NODE *tree, BasicBlock *block, int argNum){
+void declareArgs(NODE *tree, BasicBlock *block, int argNum) {
     switch (tree->type) {
-        default:
-            printf("op: %c\n", tree->type);
-            perror("Invalid token in parameter definition");
         case VOID:
             return;
         case ',':
             declareArgs(tree->left, block, argNum + 1);
             moveToFrontBlock(&block);
             tree = tree->right;
-        case LEAF:{
-            TOKEN* dest = (TOKEN *)malloc(sizeof(TOKEN));
-            if(dest == NULL) perror("Could not allocate in declare args");
+        default: {
+            TOKEN *dest = (TOKEN *)malloc(sizeof(TOKEN));
+            if (dest == NULL) perror("Could not allocate in declare args");
             dest->lexeme = NULL;
             dest->type = CONSTANT;
             dest->value = argNum;
             Tac *arg = allocTac(dest);
             arg->op = DEC_ARG;
-            appendTac(block, arg);
             arg->src1 = traverse(tree, block);
             moveToFrontBlock(&block);
-            
+            appendTac(block, arg);
             break;
-        }          
+        }
     }
-
 }
 
-void defineParams(NODE* tree, BasicBlock *block, int argNum){
-    if(tree == NULL) return;
+void defineParams(NODE *tree, BasicBlock *block, int argNum) {
+    if (tree == NULL) return;
+    printf("%c\n", tree->type);
     switch (tree->type) {
-        default:
-            perror("Invalid type in defineParams");
         case VOID:
             return;
         case ',':
             defineParams(tree->left, block, argNum + 1);
             moveToFrontBlock(&block);
-        case '~':{
-            TOKEN* dest = (TOKEN *)malloc(sizeof(TOKEN));
-            if(dest == NULL) perror("Could not allocate in declare args");
+            tree = tree->right;
+        case '~': {
+            TOKEN *dest = (TOKEN *)malloc(sizeof(TOKEN));
+            if (dest == NULL) perror("Could not allocate in declare args");
             dest->lexeme = NULL;
             dest->type = CONSTANT;
             dest->value = argNum;
@@ -186,13 +176,13 @@ void defineParams(NODE* tree, BasicBlock *block, int argNum){
             appendTac(block, arg);
             break;
         }
-
     }
 }
 
 TOKEN *traverse(NODE *tree, BasicBlock *block) {
     Tac **prev = &block->tail;  // Previous tac to append onto
-    //printf("%c\n", tree->type);
+    moveToFrontBlock(&block);
+    // printf("%c\n", tree->type);
     switch (tree->type) {
         default:
             perror("unexpected type");
@@ -338,15 +328,13 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             if (tree->right->type == ELSE) {
                 // Alloc block for else body
                 BasicBlock *elseBlock = allocBasicBlock();
-                ifBlock->next = elseBlock;
-                elseBlock->next = postIfBlock;
-
+                
                 Tac *elseLabel = allocLabel();
                 branch->dest = elseLabel->dest;
 
                 moveScope(ifBlock, FALSE);
                 traverse(tree->right->left, ifBlock);
-                moveToFrontBlock(&ifBlock);
+                appendBlock(&ifBlock, elseBlock);
                 moveScope(ifBlock, TRUE);
 
                 Tac *endIfBranch = allocTac(NULL);
@@ -357,16 +345,16 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
                 appendTac(elseBlock, elseLabel);
                 moveScope(elseBlock, FALSE);
                 traverse(tree->right->right, elseBlock);
-                moveToFrontBlock(&elseBlock);
+                appendBlock(&elseBlock, postIfBlock);
                 moveScope(elseBlock, TRUE);
 
             } else {
-                ifBlock->next = postIfBlock;
                 branch->dest = endIfLabel->dest;
                 moveScope(ifBlock, FALSE);
                 traverse(tree->right, ifBlock);
                 moveToFrontBlock(&ifBlock);
                 moveScope(ifBlock, TRUE);
+                ifBlock->next = postIfBlock;
             }
             appendTac(postIfBlock, endIfLabel);
             break;
@@ -404,13 +392,12 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             appendTac(preWhileBlock, loopStartLabel);
             TOKEN *condition = traverse(tree->left, preWhileBlock);
             appendTac(preWhileBlock, branchIfFalse);
+            appendBlock(&preWhileBlock, whileBlock);
             traverse(tree->right, whileBlock);
+            appendBlock(&whileBlock, postWhileBlock);
             appendTac(postWhileBlock, branchToCondition);
             appendTac(postWhileBlock, loopEndLabel);
             moveScope(postWhileBlock, TRUE);
-
-            appendBlock(&preWhileBlock, whileBlock);
-            appendBlock(&whileBlock, postWhileBlock);
 
             branchIfFalse->src1 =
                 condition;  // Set the pointer to the condition code
@@ -419,7 +406,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case LEAF: {
             return (TOKEN *)tree->left;
         }
-        case APPLY: {   
+        case APPLY: {
             BasicBlock *postCallBlock = allocBasicBlock();
             TOKEN *retAddrName = (TOKEN *)malloc(sizeof(TOKEN));
             if (retAddrName == NULL)
@@ -464,17 +451,21 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             appendTac(postCallBlock, loadVal);
             moveScope(postCallBlock, TRUE);
             appendTac(postCallBlock, loadAddr);
+            moveToFrontBlock(&block);
             return returnValue->dest;
         }
         case BREAK:
             break;
         case RETURN: {
-            Tac *storeReturnVal = allocTac(NULL);
+            Tac *storeReturnVal = allocTac(NULL),
+            *resetScope = allocTac(NULL);
             storeReturnVal->op = SAVE_RET_VAL;
             storeReturnVal->dest = traverse(tree->left, block);
+
+            resetScope->op = RETURN_SCOPE;
             moveToFrontBlock(&block);
             appendTac(block, storeReturnVal);
-            moveScope(block, TRUE);
+            appendTac(block, resetScope);
             Tac *retTac = allocTac(NULL);
             retTac->op = RETURN;
             appendTac(block, retTac);
@@ -598,6 +589,9 @@ void printTac(BasicBlock *block) {
                     break;
                 case SCOPE_UP:
                     printf("----SCOPE_UP----");
+                    break;
+                case RETURN_SCOPE:
+                    printf("----RETURN_SCOPE----");
                     break;
                 default:
                     printToken(t->dest);
