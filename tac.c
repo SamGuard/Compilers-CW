@@ -4,6 +4,9 @@
 
 int tempCounter = 0;
 int labelCounter = 0;
+int functionCounter = 0;
+int functionDepth = 0;  // 0 if global scope, incremented each time entering
+                        // function, decremented when leaving
 TOKEN *traverse(NODE *tree, BasicBlock *block);
 
 void moveToFrontTac(Tac **t) {
@@ -131,6 +134,9 @@ Tac *arithmetic(NODE *tree, BasicBlock *block, int op) {
 }
 
 void declareArgs(NODE *tree, BasicBlock *block, int argNum) {
+    if (tree == NULL) {
+        return;
+    }
     switch (tree->type) {
         case VOID:
             return;
@@ -190,29 +196,46 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             break;
         case 'D': {
             BasicBlock *funcBlock = allocBasicBlock();
-            Tac *funcStart = allocLabel(), *funcDefStart = allocTac(NULL),
-                *funcDefEnd = allocTac(NULL);
+            Tac *funcDefStart = allocTac(NULL), *funcStartLabel = allocLabel(),
+                *funcNewScope = allocTac(NULL),
+                *funcResetScope = allocTac(NULL), *funcDefEnd = allocTac(NULL),
+                *funcEndLabel = allocLabel();
+
             funcDefStart->op = DEFINE_FUNC_START;
             // Function name
             funcDefStart->dest = (TOKEN *)tree->left->right->left->left;
-            funcDefStart->dest->value = -1;
+            functionCounter += 1;
+            funcDefStart->dest->value = functionCounter;
             // Label for the function
-            funcDefStart->src1 = (TOKEN *)funcStart;
-            funcStart->dest->lexeme = funcDefStart->dest->lexeme;
-            funcStart->dest->value = -1;
+            funcDefStart->src1 = (TOKEN *)funcStartLabel;
+            funcStartLabel->dest->lexeme = funcDefStart->dest->lexeme;
+            funcStartLabel->dest->value = -1;
 
+            //Used to skip the function if its being defined, not called
+            funcDefStart->src2 = funcEndLabel->dest;
+
+            funcNewScope->op = NEW_SCOPE;
+            funcResetScope->op = RETURN_SCOPE;
             funcDefEnd->op = DEFINE_FUNC_END;
 
             appendBlock(&block, funcBlock);
 
             appendTac(funcBlock, funcDefStart);
-            appendTac(funcBlock, funcStart);
-            moveScope(funcBlock, FALSE);
+            appendTac(funcBlock, funcStartLabel);
+            if (functionDepth == 0) {
+                appendTac(funcBlock, funcNewScope);
+            } else {
+                moveScope(funcBlock, FALSE);
+            }
+            functionDepth++;
             defineParams(tree->left->right->right, funcBlock, 0);
             moveToFrontBlock(&funcBlock);
             traverse(tree->right, funcBlock);
             moveToFrontBlock(&funcBlock);
+            appendTac(funcBlock, funcResetScope);
+            functionDepth--;
             appendTac(funcBlock, funcDefEnd);
+            appendTac(funcBlock, funcEndLabel);
             break;
         }
         case ';':
@@ -328,7 +351,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             if (tree->right->type == ELSE) {
                 // Alloc block for else body
                 BasicBlock *elseBlock = allocBasicBlock();
-                
+
                 Tac *elseLabel = allocLabel();
                 branch->dest = elseLabel->dest;
 
@@ -457,8 +480,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case BREAK:
             break;
         case RETURN: {
-            Tac *storeReturnVal = allocTac(NULL),
-            *resetScope = allocTac(NULL);
+            Tac *storeReturnVal = allocTac(NULL), *resetScope = allocTac(NULL);
             storeReturnVal->op = SAVE_RET_VAL;
             storeReturnVal->dest = traverse(tree->left, block);
 
@@ -586,6 +608,9 @@ void printTac(BasicBlock *block) {
                     break;
                 case SCOPE_DOWN:
                     printf("---SCOPE_DOWN---");
+                    break;
+                case NEW_SCOPE:
+                    printf("---NEW_SCOPE---");
                     break;
                 case SCOPE_UP:
                     printf("----SCOPE_UP----");

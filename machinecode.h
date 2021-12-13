@@ -47,6 +47,7 @@
 #define ADDR_REG 2  // Register addressing
 #define ADDR_BAS 3  // Base addressing
 #define ADDR_IDT 4  // Identifier addressing
+#define ADDR_LBL 5 // Used when number stores a label
 
 typedef struct Frame Frame;
 
@@ -91,7 +92,7 @@ typedef struct Block {
     unsigned int memSize;
     Inst *head, *tail;
     Frame *frame;
-    struct Block *next;
+    struct Block *next, *prev;
 } Block;
 
 void outputCode(Block *code);

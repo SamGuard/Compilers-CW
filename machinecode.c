@@ -9,20 +9,21 @@ const char CODE_START[] =
     ".globl	main\n"
     "main:\n";
 
-const char CODE_CALL_MAIN[] = 
-    "jal main0\n"
+const char CODE_PRINT_AND_EXIT[] =
     "add $4, $2, $0\n"
     "li $v0, 1\n"
     "syscall\n"
     "li $v0, 10\n"
     "syscall\n";
 
-char* CODE_FUNC_DEF;
+char *CODE_FUNC_DEF;
 
 const char *ARGS_IDENT = "args";
+const char *FUNC_DEF_IDENT = "func_def";
 FILE *file;  // File to write assembly to
 
 Frame *globalFrame;
+Block *functionDefBlock;
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -122,6 +123,23 @@ Value declare(TOKEN *var, Frame *f) {
     return count;
 }
 
+Binding *getVar(TOKEN *var, Frame *f) {
+    int found = FALSE;
+    Binding *b = f->b;
+    while (b != NULL) {
+        if (b->var == var) {
+            return b;
+        }
+        b = b->next;
+    }
+
+    if (f->next == NULL) {
+        printf("Variable not declared: %s\n", var->lexeme);
+        return NULL;
+    }
+    return getVar(var, f->next);
+}
+
 Number *getVarLocation(TOKEN *var, Frame *f) {
     int found = FALSE;
     Binding *b = f->b;
@@ -195,7 +213,7 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
     getArg(tac->src1, b, regA);
     getArg(tac->src2, b, regB);
 
-    if(op == '*'){
+    if (op == '*') {
         addInstruction(b, op, regA, regB, NULL);
         addInstruction(b, INS_MFLO, regC, NULL, NULL);
         addInstruction(b, INS_SW, regC, dest, NULL);
@@ -248,6 +266,14 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                                    NULL);
                     break;
                 }
+                case NEW_SCOPE: {
+                    Frame *newFrame = allocFrame();
+                    newFrame->next = globalFrame;
+                    block->frame = newFrame;
+                    addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
+                                   NULL);
+                    break;
+                }
                 case SCOPE_UP: {
                     Frame *oldFrame = block->frame;
                     block->frame = block->frame->next;
@@ -256,6 +282,9 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case RETURN_SCOPE: {
+                    if (block->tail->op == INS_JPR) {
+                        break;
+                    }
                     Frame *currFrame = block->frame,
                           *prevFrame = block->frame->next;
                     Number *stackPointer = newNum(ADDR_REG, REG_SP, NULL);
@@ -270,33 +299,60 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case BRANCH:
-                    addInstruction(block, INS_JMP, (Number *)tacList->dest,
-                                   NULL, NULL);
+                    addInstruction(
+                        block, INS_JMP,
+                        newNum(ADDR_LBL, -1, (Number *)tacList->dest), NULL,
+                        NULL);
                     break;
                 case BRANCH_FALSE: {
                     // Branch if the value is 0
                     // Register to load value into
                     Number *reg = newNum(ADDR_REG, REG_T_START, NULL);
                     getArg(tacList->src1, block, reg);
-                    addInstruction(block, INS_BZE, (Number *)tacList->dest, reg,
-                                   NULL);
+                    addInstruction(
+                        block, INS_BZE,
+                        newNum(ADDR_LBL, -1, (Number *)tacList->dest), reg,
+                        NULL);
                     break;
                 }
                 case LABEL:
-                    addInstruction(block, LABEL, (Number *)tacList->dest, NULL,
-                                   NULL);
+                    addInstruction(
+                        block, LABEL,
+                        newNum(ADDR_LBL, -1, (Number *)tacList->dest), NULL,
+                        NULL);
                     break;
                 case DEFINE_FUNC_START: {
                     declare(tacList->dest, block->frame);
-                    char buf[256];
-                    sprintf(buf, 
-                    "la $t0, %s\n"
-                    "sw $t0, func_def\n", 
-                    tacList->dest->lexeme);
-                    strcat(CODE_FUNC_DEF, buf);
+                    // add function label to static memory
+                    if (strcmp(tacList->dest->lexeme, "main") != 0) {
+                        char buf[256];
+                        sprintf(buf,
+                                "la $t1, %s\n"
+                                "sw $t1, %d($t0)\n",
+                                tacList->dest->lexeme,
+                                WORD_SIZE * tacList->dest->value);
+                        strcat(CODE_FUNC_DEF, buf);
+                    }
+                    Number *offset =
+                               newNum(ADDR_IMM,
+                                      tacList->dest->value * WORD_SIZE, NULL),
+                           *reg = newNum(ADDR_REG, REG_T_START, NULL),
+                           *zero = newNum(ADDR_REG, 0, NULL),
+                           *memLoc =
+                               getVarLocation(tacList->dest, block->frame);
+
+                    addInstruction(functionDefBlock, INS_ADD, reg, zero,
+                                   offset);
+                    addInstruction(functionDefBlock, INS_SW, reg, memLoc, NULL);
+
                     Frame *funcFrame = allocFrame();
                     funcFrame->next = block->frame;
                     block->frame = funcFrame;
+
+                    addInstruction(
+                        block, INS_JMP,
+                        newNum(ADDR_LBL, -1, (Number *)tacList->src2), NULL,
+                        NULL);
                     break;
                 }
                 case DEFINE_FUNC_END: {
@@ -304,6 +360,10 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                         perror("No more frames left");
                     }
                     block->frame = block->frame->next;
+                    if (block->tail->op != INS_JPR) {
+                        addInstruction(block, INS_JPR, NULL, NULL, NULL);
+                    }
+
                     break;
                 }
                 // RETURN ADDRESS
@@ -332,10 +392,27 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     getArg(tacList->dest, block, val);
                     break;
                 }
-                case APPLY:
-                    addInstruction(block, INS_JAL, (Number *)tacList->dest,
-                                   NULL, NULL);
+                case APPLY: {
+                    Number *funcOffset = newNum(ADDR_REG, REG_T_START, NULL);
+                    getArg(tacList->dest, block, funcOffset);
+
+                    Number *funcDefSpaceIdent =
+                        newNum(ADDR_IDT, 0, (Number *)FUNC_DEF_IDENT);
+                    Number *funcAddrReg =
+                        newNum(ADDR_REG, REG_T_START + 1, NULL);
+
+                    addInstruction(block, INS_LA, funcAddrReg,
+                                   funcDefSpaceIdent, NULL);
+                    addInstruction(block, INS_ADD, funcAddrReg, funcAddrReg,
+                                   funcOffset);
+
+                    Number *fullFuncAddress = newNum(ADDR_BAS, 0, funcAddrReg);
+
+                    addInstruction(block, INS_LW, funcAddrReg, fullFuncAddress,
+                                   NULL);
+                    addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL);
                     break;
+                }
                 case RETURN: {
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
                     break;
@@ -449,30 +526,40 @@ void printLabel(Number *label) {
         return;
     }
 
-    if (l->value != -1) {
+    if (l->lexeme[0] == '_') {
         fprintf(file, "%s%d", l->lexeme, l->value);
     } else {
         fprintf(file, "%s", l->lexeme);
     }
 }
 
+/**
+ * @brief Prints branching instructions
+ *
+ * @param ins The string for the branch instruction
+ * @param f Current frame to get values from
+ * @param label Label to jump to
+ * @param val (optional) if conditional branch then this is the value to jump on
+ */
 void printBranch(char *ins, Frame *f, Number *label, Number *val) {
-    TOKEN *l = (TOKEN *)label;
-    if (val == NULL) {
-        fprintf(file, "%s ", ins);
-        printLabel(label);
+    fprintf(file, "%s ", ins);
+    if (val != NULL) {
+        printNum(f, val);
+        fprintf(file, ", ");
+    }
+
+    if (label->addrMode != ADDR_LBL) {
+        printNum(f, label);
         fprintf(file, "\n");
         return;
     }
-    fprintf(file, "%s ", ins);
-    printNum(f, val);
-    fprintf(file, ", ");
-    printLabel(label);
+
+    printLabel(label->base);
     fprintf(file, "\n");
 }
 
 void printMoveStack(int bytesToMove) {
-    fprintf(file, "addi $sp, $sp, %d\n", bytesToMove);
+    fprintf(file, "add $%d, $%d, %d\n", REG_SP, REG_SP, bytesToMove);
 }
 
 void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
@@ -504,18 +591,12 @@ void printIndent(unsigned int depth) {
     }
 }
 
-// Pritning goes here
-void outputCode(Block *code) {
-    unsigned int depth = 0;
-    file = fopen("./outputs/out.asm", "w");
-    fprintf(file, CODE_DATA);
-    fprintf(file, CODE_START);
-    fprintf(file, CODE_FUNC_DEF);
-    fprintf(file, CODE_CALL_MAIN);
-
+void printInstructions(Block *code) {
+    Frame *currFrame;
+    Inst *i;
     while (code != NULL) {
-        Frame *currFrame = code->frame;
-        Inst *i = code->head;
+        currFrame = code->frame;
+        i = code->head;
         while (i != NULL) {
             // printIndent(depth);
             switch (i->op) {
@@ -557,19 +638,14 @@ void outputCode(Block *code) {
                     printInstruction("mflo", currFrame, i->arg1, NULL, NULL);
                     break;
                 case LABEL:
-                    printLabel(i->arg1);
+                    printLabel(i->arg1->base);
                     fprintf(file, ":\n");
                     break;
                 case INS_SPD:
-                    depth++;
                     currFrame = (Frame *)i->arg1;
                     printMoveStack(currFrame->frameSize * WORD_SIZE * -1);
                     break;
                 case INS_SPU:
-                    if (depth == 0)
-                        perror("No more stack to pop");
-                    else
-                        depth--;
                     printMoveStack(currFrame->frameSize * WORD_SIZE);
                     currFrame = currFrame->next;
                     break;
@@ -590,18 +666,41 @@ void outputCode(Block *code) {
         }
         code = code->next;
     }
-    
+}
+
+// Pritning goes here
+void outputCode(Block *code) {
+    unsigned int depth = 0;
+    file = fopen("./outputs/out.asm", "w");
+    fprintf(file, CODE_DATA);
+    fprintf(file, CODE_START);
+    fprintf(file, CODE_FUNC_DEF);
+    fprintf(file, "add $sp, $sp, %d\n", -WORD_SIZE * globalFrame->frameSize);
+    printInstructions(functionDefBlock);
+    fprintf(file, "jal main0\n");
+    fprintf(file, "add $sp, $sp, %d\n", WORD_SIZE * globalFrame->frameSize);
+    fprintf(file, CODE_PRINT_AND_EXIT);
+    printInstructions(code);
+
     fclose(file);
 }
 
 // ------------------------------PRINTING-------------------
 
 void toMachineCode(BasicBlock *tree) {
-    CODE_FUNC_DEF = (char*)malloc(4096 * sizeof(char));
+    CODE_FUNC_DEF = (char *)malloc(4096 * sizeof(char));
     CODE_FUNC_DEF[0] = '\0';
+    strcat(CODE_FUNC_DEF,
+           "la $t0, func_def\n"
+           "la $t1, main0\n"
+           "sw $t1, 0($t0)\n");
+
     Block *block = allocBlock();
+
+    functionDefBlock = allocBlock();
     globalFrame = allocFrame();
     block->frame = globalFrame;
-
-    outputCode(traverseTac(tree, block));
+    traverseTac(tree, block);
+    outputCode(block);
+    printf("done\n");
 }
