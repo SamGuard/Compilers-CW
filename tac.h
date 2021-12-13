@@ -25,8 +25,11 @@
 #define SAVE_RET_VAL 290
 #define LOAD_RET_VAL 291
 
-#define DEC_ARG 292
-#define DEF_PARAM 293
+#define SAVE_MEM_POINT 292
+#define LOAD_MEM_POINT 293
+
+#define DEC_ARG 294
+#define DEF_PARAM 295
 
 typedef struct Tac {
     int op;

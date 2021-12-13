@@ -23,7 +23,7 @@ const char *FUNC_DEF_IDENT = "func_def";
 FILE *file;  // File to write assembly to
 
 Frame *globalFrame;
-Block *functionDefBlock;
+Block *globalDefBlock;
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -152,8 +152,9 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
     }
 
     if (found == TRUE) {
-        Number *n =
-            newNum(ADDR_BAS, b->memLoc.i, newNum(ADDR_REG, REG_SP, NULL));
+        Number *n = newNum(
+            ADDR_BAS, b->memLoc.i,
+            newNum(ADDR_REG, (f == globalFrame) ? REG_GP : REG_SP, NULL));
         n->framesBack = 0;
         return n;
     }
@@ -244,10 +245,12 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                            *destMem =
                                getVarLocation(tacList->dest, block->frame);
 
+                    Block *b =
+                        (block->frame == globalFrame) ? globalDefBlock : block;
                     // Load value into the register
-                    setRegister(tacList->src1, block, destReg);
+                    setRegister(tacList->src1, b, destReg);
                     // Write the value in the register to the memory
-                    addInstruction(block, INS_SW, destReg, destMem, NULL);
+                    addInstruction(b, INS_SW, destReg, destMem, NULL);
                     break;
                 }
                 case '*':
@@ -341,9 +344,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                            *memLoc =
                                getVarLocation(tacList->dest, block->frame);
 
-                    addInstruction(functionDefBlock, INS_ADD, reg, zero,
-                                   offset);
-                    addInstruction(functionDefBlock, INS_SW, reg, memLoc, NULL);
+                    addInstruction(globalDefBlock, INS_ADD, reg, zero, offset);
+                    addInstruction(globalDefBlock, INS_SW, reg, memLoc, NULL);
 
                     Frame *funcFrame = allocFrame();
                     funcFrame->next = block->frame;
@@ -392,6 +394,19 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     getArg(tacList->dest, block, val);
                     break;
                 }
+                // MEMORY POINTER
+                case LOAD_MEM_POINT: {
+                    Number *spReg = newNum(ADDR_REG, REG_PSP, NULL);
+                    getArg(tacList->dest, block, spReg);
+                    break;
+                }
+                case SAVE_MEM_POINT: {
+                    Number *spReg = newNum(ADDR_REG, REG_SP, NULL);
+                    addInstruction(block, INS_SW, spReg,
+                                   getVarLocation(tacList->dest, block->frame),
+                                   NULL);
+                    break;
+                }
                 case APPLY: {
                     Number *funcOffset = newNum(ADDR_REG, REG_T_START, NULL);
                     getArg(tacList->dest, block, funcOffset);
@@ -410,10 +425,18 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
 
                     addInstruction(block, INS_LW, funcAddrReg, fullFuncAddress,
                                    NULL);
-                    addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL);
+                    Number *sp = newNum(ADDR_REG, REG_SP, NULL),
+                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL),
+                           *zero = newNum(ADDR_REG, 0, NULL);
+                    addInstruction(block, INS_ADD, saveSP, sp, zero);
+                        addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL);
                     break;
                 }
                 case RETURN: {
+                    Number *sp = newNum(ADDR_REG, REG_SP, NULL),
+                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL),
+                           *zero = newNum(ADDR_REG, 0, NULL);
+                    addInstruction(block, INS_ADD, sp, saveSP, zero);
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
                     break;
                 }
@@ -506,6 +529,8 @@ void printNum(Frame *f, Number *n) {
             Number *base = n->base;
             if (base->addrMode == ADDR_REG && base->value == REG_SP)
                 fprintf(file, "%d(", calcVariableOffset(f, n));
+            else if (base->addrMode == ADDR_REG && base->value == REG_GP)
+                fprintf(file, "%d(", WORD_SIZE * n->value);
             else
                 fprintf(file, "%d(", n->value);
             printNum(f, n->base);
@@ -675,10 +700,12 @@ void outputCode(Block *code) {
     fprintf(file, CODE_DATA);
     fprintf(file, CODE_START);
     fprintf(file, CODE_FUNC_DEF);
-    fprintf(file, "add $sp, $sp, %d\n", -WORD_SIZE * globalFrame->frameSize);
-    printInstructions(functionDefBlock);
-    fprintf(file, "jal main0\n");
-    fprintf(file, "add $sp, $sp, %d\n", WORD_SIZE * globalFrame->frameSize);
+    printInstructions(globalDefBlock);
+    fprintf(file,
+            "add $%d, $0, $sp\n"
+            "add $sp, $sp, -1024\n"
+            "jal main0\n",
+            REG_SP);
     fprintf(file, CODE_PRINT_AND_EXIT);
     printInstructions(code);
 
@@ -697,7 +724,7 @@ void toMachineCode(BasicBlock *tree) {
 
     Block *block = allocBlock();
 
-    functionDefBlock = allocBlock();
+    globalDefBlock = allocBlock();
     globalFrame = allocFrame();
     block->frame = globalFrame;
     traverseTac(tree, block);

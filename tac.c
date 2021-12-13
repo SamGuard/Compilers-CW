@@ -211,7 +211,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             funcStartLabel->dest->lexeme = funcDefStart->dest->lexeme;
             funcStartLabel->dest->value = -1;
 
-            //Used to skip the function if its being defined, not called
+            // Used to skip the function if its being defined, not called
             funcDefStart->src2 = funcEndLabel->dest;
 
             funcNewScope->op = NEW_SCOPE;
@@ -432,23 +432,38 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case APPLY: {
             BasicBlock *postCallBlock = allocBasicBlock();
             TOKEN *retAddrName = (TOKEN *)malloc(sizeof(TOKEN));
-            if (retAddrName == NULL)
+            TOKEN *memPointName = (TOKEN *)malloc(sizeof(TOKEN));
+            if (retAddrName == NULL || memPointName == NULL)
                 perror("Could not allocate memory in APPLY");
             retAddrName->lexeme = (char *)"RA";
             retAddrName->type = IDENTIFIER;
 
-            Tac *callFunc = allocTac(NULL), *decVar = allocTac(NULL),
-                *saveAddr = allocTac(NULL), *loadAddr = allocTac(NULL),
-                *loadVal = allocTac(NULL), *returnValue = allocTemp(block);
+            memPointName->lexeme = (char *)"MP";
+            memPointName->type = IDENTIFIER;
 
-            decVar->op = '~';
-            decVar->dest = retAddrName;
+            Tac *callFunc = allocTac(NULL), *decRA = allocTac(NULL),
+                *decMP = allocTac(NULL), *saveAddr = allocTac(NULL),
+                *saveMP = allocTac(NULL), *loadAddr = allocTac(NULL),
+                *loadMP = allocTac(NULL), *loadVal = allocTac(NULL),
+                *returnValue = allocTemp(block);
+
+            decRA->op = '~';
+            decRA->dest = retAddrName;
+
+            decMP->op = '~';
+            decMP->dest = memPointName;
 
             saveAddr->op = SAVE_RET_ADDR;
             saveAddr->dest = retAddrName;
 
             loadAddr->op = LOAD_RET_ADDR;
             loadAddr->dest = retAddrName;
+
+            saveMP->op = SAVE_MEM_POINT;
+            saveMP->dest = memPointName;
+
+            loadMP->op = LOAD_MEM_POINT;
+            loadMP->dest = memPointName;
 
             loadVal->op = LOAD_RET_VAL;
             loadVal->dest = returnValue->dest;
@@ -464,8 +479,10 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             // Load return value
             // Load return address back into register
             moveToFrontBlock(&block);
-            appendTac(block, decVar);
+            appendTac(block, decRA);
+            appendTac(block, decMP);
             appendTac(block, saveAddr);
+            appendTac(block, saveMP);
             moveScope(block, FALSE);
             declareArgs(tree->right, block, 0);
             moveToFrontBlock(&block);
@@ -474,6 +491,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             appendTac(postCallBlock, loadVal);
             moveScope(postCallBlock, TRUE);
             appendTac(postCallBlock, loadAddr);
+            appendTac(postCallBlock, loadMP);
             moveToFrontBlock(&block);
             return returnValue->dest;
         }
@@ -570,6 +588,12 @@ void printTac(BasicBlock *block) {
                     break;
                 case LOAD_RET_ADDR:
                     printf("---LOAD RET ADDR---");
+                    break;
+                case SAVE_MEM_POINT:
+                    printf("---SAVE MEM POINT---");
+                    break;
+                case LOAD_MEM_POINT:
+                    printf("---LOAD MEM POINT---");
                     break;
                 case SAVE_RET_VAL:
                     printf("RETURN VALUE = ");
