@@ -24,7 +24,7 @@ files = [
             #["loop2.c", "20"],
             ["loop3.c", "2001"],
             ["slp1.c", "0"],
-            ["lexscope.c", "2"]
+            ["lexscope1.c", "2"]
         ]
 
 class TestInterpreter:

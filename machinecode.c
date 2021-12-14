@@ -69,6 +69,7 @@ Frame *allocFrame() {
     f->frameSize = 0;
     f->next = NULL;
     f->b = NULL;
+    f->isRoot = FALSE;
     return f;
 }
 
@@ -179,6 +180,7 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
     }
     Number *n = getVarLocation(var, f->next);
     n->framesBack++;
+    n->chainsBack += (f->isRoot == TRUE) ? 1 : 0;
     return n;
 }
 
@@ -305,6 +307,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 }
                 case NEW_SCOPE: {
                     Frame *newFrame = allocFrame();
+                    newFrame->isRoot = TRUE;
                     newFrame->next = globalFrame;
                     block->frame = newFrame;
                     addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
@@ -322,15 +325,16 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     if (block->tail->op == INS_JPR) {
                         break;
                     }
-                    Frame *currFrame = block->frame;
-                    Number *stackPointer = newNum(ADDR_REG, REG_SP, NULL);
+                    Frame *currFrame = block->frame,
+                    *prevFrame = NULL;                    
                     Number *frameSize;
-                    while (currFrame->next != NULL) {
+                    while (currFrame != globalFrame && (prevFrame == NULL || prevFrame->isRoot == FALSE)) {
                         frameSize = newNum(
                             ADDR_IMM, currFrame->frameSize * WORD_SIZE, NULL);
-                        addInstruction(block, INS_ADD, stackPointer,
-                                       stackPointer, frameSize,
+                        addInstruction(block, INS_ADD, sp,
+                                       sp, frameSize,
                                        "Return scope to original position");
+                        prevFrame = currFrame;
                         currFrame = currFrame->next;
                     }
                     break;
@@ -416,10 +420,6 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                                    newNum(ADDR_IMM, 2 * WORD_SIZE, NULL), NULL,
                                    "Increment closure counter");
 
-                    Frame *funcFrame = allocFrame();
-                    funcFrame->next = block->frame;
-                    block->frame = funcFrame;
-
                     addInstruction(
                         block, INS_JMP,
                         newNum(ADDR_LBL, -1, (Number *)tacList->src2), NULL,
@@ -427,8 +427,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case DEFINE_FUNC_END: {
-                    if (block->frame->next == NULL) {
-                        perror("No more frames left");
+                    if(block->frame->next == NULL){
+                        perror("No more frames");
                     }
                     block->frame = block->frame->next;
                     if (block->tail->op == INS_JPR) {
@@ -490,7 +490,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     getArg(tacList->dest, block, closBytesAlong);
 
                     // Load closure space address
-                    Number *closAddress = newNum(ADDR_IDT, -1, CLOSURE_IDENT),
+                    Number *closAddress = newNum(ADDR_IDT, -1, (Number*)CLOSURE_IDENT),
                            *closAddressReg =
                                newNum(ADDR_REG, REG_T_START + 1, NULL);
                     addInstruction(block, INS_LA, closAddressReg, closAddress,

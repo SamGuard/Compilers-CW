@@ -70,6 +70,7 @@ typedef struct Number {
     int addrMode;
     int value;
     int framesBack;  // Counts the amount of frames back the variable was found
+    int chainsBack;  // How many chains back to look for variable
     struct Number *base;
 } Number;
 
@@ -82,6 +83,7 @@ typedef struct Binding {
 typedef struct Frame {
     Binding *b;
     unsigned int frameSize;
+    int isRoot;  // Is first frame in new chain of frames
     struct Frame *next;
 } Frame;
 

@@ -21,7 +21,8 @@ void appendTac(BasicBlock *dest, Tac *src) {
         return;
     }
     moveToFrontTac(&dest->tail);
-    (dest)->tail->next = src;
+    dest->tail->next = src;
+    dest->tail = dest->tail->next;
 }
 
 void moveToFrontBlock(BasicBlock **dest) {
@@ -235,7 +236,9 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             moveToFrontBlock(&funcBlock);
             traverse(tree->right, funcBlock);
             moveToFrontBlock(&funcBlock);
-            appendTac(funcBlock, funcResetScope);
+            if(funcBlock->tail->op != RETURN){
+                appendTac(funcBlock, funcResetScope);
+            }
             functionDepth--;
             appendTac(funcBlock, funcDefEnd);
             appendTac(funcBlock, funcEndLabel);

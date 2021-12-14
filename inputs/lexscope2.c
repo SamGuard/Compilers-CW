@@ -1,17 +1,11 @@
-function a(){
-  int b = 0;
-  function f(){
-    b = b + 1;
-    return b;
-  } 
-  return f;
+int x = 3;
+int f(function z){
+  int x = 0;
+  return z(1);
 }
 
-int main(){
-  function f = a();
-  f();
-  f();
-  f();
-  f();
-  return f();
+int main() {
+    int x = 1;
+    int g(int y) { return x + y; }
+    return f(g);
 }
