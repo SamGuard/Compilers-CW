@@ -3,18 +3,9 @@ import os
 import re
 
 #BINARY_PATH = "bin/mycc"
-COMMAND = "./bin/interpreter.exe"
-
-
-class TestInterpreter:
-
-    def test_interpreter_return(self):
-        code = "int main() {return 1;}"
-        result = "1"
-        self.interpreter_test_helper(code, result)
-
-    def testAll(self):
-        files = [
+interpreter = "./bin/interpreter.exe"
+machine = "./bin/MachineCode.exe"
+files = [
             ["basic1.c", "0"],
             ["basic2.c", "4"],
             ["branch1.c", "100"],
@@ -27,6 +18,16 @@ class TestInterpreter:
             ["slp1.c", "0"],
             ["lexscope.c", "2"]
         ]
+
+class TestInterpreter:
+
+    def test_interpreter_return(self):
+        code = "int main() {return 1;}"
+        result = "1"
+        self.interpreter_test_helper(code, result)
+
+    def testAll(self):
+        
 
         for fileName in files:
             file = open("./inputs/" + fileName[0], mode='r')

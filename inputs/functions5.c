@@ -5,7 +5,7 @@ int add1(int x){
 }
 
 int add2(int x){
-  return x + 2;
+  return add1(add1(x));
 }
 
 int main(){

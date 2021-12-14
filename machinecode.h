@@ -6,11 +6,7 @@
 #include "./tac.h"
 #include "./traverseStructures.h"
 
-#define OUTPUT_MODE 1  // 0 is to print, 1 is write to file
-
 #define WORD_SIZE 4  // Word size in bytes
-
-#define MAX_ARG_SIZE 4;  // Maximum amount of arguements a function can have
 
 // Memory IO
 #define INS_LW 512  // Load word
@@ -34,14 +30,18 @@
 #define INS_SPD 519  // Decrease stack pointer
 #define INS_SPU 520  // Increment stack pointer
 
-#define INS_MFHI 521
-#define INS_MFLO 522
+// Used for multiplication results
+#define INS_MFHI 521 // High register
+#define INS_MFLO 522 // Low-register
+
+#define INS_SYS 523 // syscall
 
 #define REG_RET 2
+#define REG_ARG_START 4
 #define REG_T_START 8  // Which register is the start of the temp registers
 #define REG_SP 16      // Which register holds the stack pointer
-#define REG_PSP 17 // Previous stack pointer to return to after function call
-#define REG_GP 28      // Which register holds the global pointer
+#define REG_PSP 17  // Previous stack pointer to return to after function call
+#define REG_GP 28   // Which register holds the global pointer
 #define REG_RA 31
 
 #define ADDR_IMM 1  // Immediate addressing

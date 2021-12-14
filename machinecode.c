@@ -3,13 +3,17 @@
 const char CODE_DATA[] =
     ".data\n"
     "args: .space 128 # Allocate 128 bytes for arguemnts\n"
-    "func_def: .space 1024 # Allocate 1024 bytes for functions\n";
+    "func_def: .space 1024 # Allocate 1024 bytes for functions\n"
+    "exit_message: .asciiz \"Program exited with code: \"\n";
 const char CODE_START[] =
     ".text\n"
     ".globl	main\n"
     "main:\n";
 
 const char CODE_PRINT_AND_EXIT[] =
+    "la $a0, exit_message\n"
+    "li $v0, 4\n"
+    "syscall\n"
     "add $4, $2, $0\n"
     "li $v0, 1\n"
     "syscall\n"
@@ -24,6 +28,8 @@ FILE *file;  // File to write assembly to
 
 Frame *globalFrame;
 Block *globalDefBlock;
+
+Number *zero, *sp;
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -189,9 +195,8 @@ void setRegister(TOKEN *src, Block *b, Number *destReg) {
     if (src->type == CONSTANT) {
         Number
             // Hold the value 0
-            *zeroReg = newNum(ADDR_REG, 0, NULL),
             *val = newNum(ADDR_IMM, src->value, NULL);
-        addInstruction(b, INS_ADD, destReg, zeroReg, val);
+        addInstruction(b, INS_ADD, destReg, zero, val);
     } else if (src->type == IDENTIFIER) {
         getArg(src, b, destReg);
     } else {
@@ -340,7 +345,6 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                                newNum(ADDR_IMM,
                                       tacList->dest->value * WORD_SIZE, NULL),
                            *reg = newNum(ADDR_REG, REG_T_START, NULL),
-                           *zero = newNum(ADDR_REG, 0, NULL),
                            *memLoc =
                                getVarLocation(tacList->dest, block->frame);
 
@@ -401,7 +405,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case SAVE_MEM_POINT: {
-                    Number *spReg = newNum(ADDR_REG, REG_SP, NULL);
+                    Number *spReg = newNum(ADDR_REG, REG_PSP, NULL);
                     addInstruction(block, INS_SW, spReg,
                                    getVarLocation(tacList->dest, block->frame),
                                    NULL);
@@ -410,32 +414,51 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 case APPLY: {
                     Number *funcOffset = newNum(ADDR_REG, REG_T_START, NULL);
                     getArg(tacList->dest, block, funcOffset);
-
+                    // Get identifier for static function definitions
                     Number *funcDefSpaceIdent =
                         newNum(ADDR_IDT, 0, (Number *)FUNC_DEF_IDENT);
+
+                    // Place to store the address of the function definitions
                     Number *funcAddrReg =
                         newNum(ADDR_REG, REG_T_START + 1, NULL);
 
+                    // Load the address
                     addInstruction(block, INS_LA, funcAddrReg,
                                    funcDefSpaceIdent, NULL);
+                    // Add the offset for this specific function, decided in TAC
                     addInstruction(block, INS_ADD, funcAddrReg, funcAddrReg,
                                    funcOffset);
-
+                    // Full address of where the function defintion is stored
                     Number *fullFuncAddress = newNum(ADDR_BAS, 0, funcAddrReg);
-
+                    // Load address of the function start into register
                     addInstruction(block, INS_LW, funcAddrReg, fullFuncAddress,
                                    NULL);
-                    Number *sp = newNum(ADDR_REG, REG_SP, NULL),
-                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL),
-                           *zero = newNum(ADDR_REG, 0, NULL);
+
+                    // Save the stack pointer in memory
+                    Number *saveSP = newNum(ADDR_REG, REG_PSP, NULL);
                     addInstruction(block, INS_ADD, saveSP, sp, zero);
-                        addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL);
+
+                    // Allocate new stack space for function call
+                    Number *v0 = newNum(ADDR_REG, REG_RET, NULL),
+                           *sysArg = newNum(ADDR_IMM, 9, NULL),
+                           *a0 = newNum(ADDR_REG, REG_ARG_START, NULL),
+                           *memSize = newNum(ADDR_IMM, 1024, NULL);
+                    // Load syscall number and amount of memory to be allocated into registers
+                    addInstruction(block, INS_ADD, v0, zero, sysArg);
+                    addInstruction(block, INS_ADD, a0, zero, memSize);
+                    // Call syscall
+                    addInstruction(block, INS_SYS, NULL, NULL, NULL);
+                    // Set return value to stack pointer
+                    addInstruction(block, INS_ADD, sp, v0, zero);
+
+
+                    // Jump to function instructions
+                    addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL);
                     break;
                 }
                 case RETURN: {
                     Number *sp = newNum(ADDR_REG, REG_SP, NULL),
-                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL),
-                           *zero = newNum(ADDR_REG, 0, NULL);
+                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL);
                     addInstruction(block, INS_ADD, sp, saveSP, zero);
                     addInstruction(block, INS_JPR, NULL, NULL, NULL);
                     break;
@@ -686,6 +709,8 @@ void printInstructions(Block *code) {
                 case INS_JPR:
                     printInstruction("jr $ra", currFrame, NULL, NULL, NULL);
                     break;
+                case INS_SYS:
+                    printInstruction("syscall", currFrame, NULL, NULL, NULL);
             }
             i = i->next;
         }
@@ -702,8 +727,10 @@ void outputCode(Block *code) {
     fprintf(file, CODE_FUNC_DEF);
     printInstructions(globalDefBlock);
     fprintf(file,
-            "add $%d, $0, $sp\n"
-            "add $sp, $sp, -1024\n"
+            "li $v0, 9\n"
+            "li $a0, 1024\n"
+            "syscall\n"
+            "add $%d, $0, $v0\n"
             "jal main0\n",
             REG_SP);
     fprintf(file, CODE_PRINT_AND_EXIT);
@@ -715,6 +742,9 @@ void outputCode(Block *code) {
 // ------------------------------PRINTING-------------------
 
 void toMachineCode(BasicBlock *tree) {
+    // Define constant registers
+    zero = newNum(ADDR_REG, 0, NULL);
+    sp = newNum(ADDR_REG, REG_SP, NULL);
     CODE_FUNC_DEF = (char *)malloc(4096 * sizeof(char));
     CODE_FUNC_DEF[0] = '\0';
     strcat(CODE_FUNC_DEF,
