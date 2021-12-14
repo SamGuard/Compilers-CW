@@ -85,6 +85,7 @@ Value *tokenToVal(TOKEN *t) {
 Binding *findBinding(TOKEN *ident, Frame *f) {
     if (f == NULL) {
         perror("Variable not declared");
+        printf("var: %s\n", ident->lexeme);
         return 0;
     }
 
@@ -142,6 +143,9 @@ Value *retrieve(TOKEN *ident, Frame *f) {
 // Takes pointer to the top of the AST containing params
 // And a pointer to the new frame of vars
 void applyArgsToParams(NODE *args, NODE *params, Frame *oldF, Frame *newF) {
+    if(args == NULL){
+        return;
+    }
     switch (params->type) {
         default:
             perror("Invalid token in parameter definition");
@@ -396,7 +400,7 @@ Value *traverse(NODE *tree, Frame *f) {
                 Value *v = traverse(func->f->right, newFrame);
                 returning = FALSE;
                 breaking = FALSE;
-                freeFrame(newFrame);
+                //freeFrame(newFrame);
                 return v;
             } else {
                 return bValue;
