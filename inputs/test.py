@@ -3,17 +3,25 @@ import os
 import re
 
 #BINARY_PATH = "bin/mycc"
-interpreter = "./bin/interpreter.exe"
-machine = "./bin/MachineCode.exe"
+interpreter = "./bin/interpreter"
+machine = "./bin/MachineCode"
+runShell = "./run.sh"
 files = [
             ["basic1.c", "0"],
-            ["basic2.c", "4"],
+            ["basic2.c", "5"],
             ["branch1.c", "100"],
+            ["branch2.c", "-1"],
             ["count.c", "1000000"],
             ["factorial.c", "3628800"],
+            ["functions1.c", "10"],
+            ["functions2.c", "1"],
+            ["functions3.c", "11"],
+            ["functions4.c", "2"],
+            ["functions5.c", "3"],
+            ["functions6.c", "2"],
             ["HCF.c", "4"],
             ["loop1.c", "1"],
-            ["loop2.c", "20"],
+            #["loop2.c", "20"],
             ["loop3.c", "2001"],
             ["slp1.c", "0"],
             ["lexscope.c", "2"]
@@ -39,22 +47,25 @@ class TestInterpreter:
     def interpreter_test_helper(self, fileName: str, input_code: str, output_regex: str):
         print(f"Testing {fileName}: ")
         process = subprocess.Popen(
-            [COMMAND], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        output, err = process.communicate(input=bytes(input_code, "ascii"))
+            [runShell, fileName], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        output, err = process.communicate(input=bytes(input_code, "utf-8'"))
 
-        message = f"Failure messages in {fileName}\nStderr: \n{err.decode('ascii')}\nStdout: \n{output.decode('ascii')}"
+        message = f"Failure messages in {fileName}\nStderr: \n{err.decode('utf-8')}\n"
 
-        self.longMessage = True
+        self.longMessage = False
 
         if(process.returncode != 0):
             print(message)
 
-        stdout = output.decode("ascii")
+        stdout = output.decode("utf-8'")
 
         if re.search(f"Program exited with code: {output_regex}\n", stdout):
             print("Success")
         else:
-            print(message)
+            #print(message)
+            print("Fail:")
+            print(stdout[-64:])
+
 
         print("------------------")
 

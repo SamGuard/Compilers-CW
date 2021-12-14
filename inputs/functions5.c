@@ -1,5 +1,3 @@
-int b = 267;
-
 int add1(int x){
   return x + 1;
 }
@@ -18,5 +16,5 @@ int main(){
     f = add1;
   }
 
-  return f(a) + b;
+  return f(a);
 }

@@ -31,18 +31,20 @@
 #define INS_SPU 520  // Increment stack pointer
 
 // Used for multiplication results
-#define INS_MFHI 521 // High register
-#define INS_MFLO 522 // Low-register
+#define INS_MFHI 521  // High register
+#define INS_MFLO 522  // Low-register
 
-#define INS_SYS 523 // syscall
+#define INS_SYS 523  // syscall
 
 #define REG_RET 2
 #define REG_ARG_START 4
 #define REG_T_START 8  // Which register is the start of the temp registers
 #define REG_SP 16      // Which register holds the stack pointer
 #define REG_PSP 17  // Previous stack pointer to return to after function call
+#define REG_CLS 18  // Closure counter register
 #define REG_GP 28   // Which register holds the global pointer
-#define REG_RA 31
+#define REG_FP 30   // Used to point to previous frames data
+#define REG_RA 31   // Return Address
 
 #define ADDR_IMM 1  // Immediate addressing
 #define ADDR_REG 2  // Register addressing
@@ -86,6 +88,7 @@ typedef struct Frame {
 typedef struct Instruction {
     int op;
     Number *arg1, *arg2, *arg3;
+    char *comment;
     struct Instruction *next;
 } Inst;
 

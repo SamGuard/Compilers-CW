@@ -186,7 +186,6 @@ void defineParams(NODE *tree, BasicBlock *block, int argNum) {
 }
 
 TOKEN *traverse(NODE *tree, BasicBlock *block) {
-    Tac **prev = &block->tail;  // Previous tac to append onto
     moveToFrontBlock(&block);
     // printf("%c\n", tree->type);
     switch (tree->type) {
@@ -203,9 +202,13 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
 
             funcDefStart->op = DEFINE_FUNC_START;
             // Function name
-            funcDefStart->dest = (TOKEN *)tree->left->right->left->left;
-            functionCounter += 1;
-            funcDefStart->dest->value = functionCounter;
+            funcDefStart->dest = (TOKEN *)tree->left->right->left->left;            
+            if(strcmp("main", funcDefStart->dest->lexeme) == 0){
+                funcDefStart->dest->value = 0;
+            } else {
+                functionCounter += 1;
+                funcDefStart->dest->value = functionCounter;
+            }
             // Label for the function
             funcDefStart->src1 = (TOKEN *)funcStartLabel;
             funcStartLabel->dest->lexeme = funcDefStart->dest->lexeme;
@@ -240,7 +243,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         }
         case ';':
             if (tree->right != NULL) {
-                traverse(tree->left, block);
+                if (tree->left != NULL) traverse(tree->left, block);
                 moveToFrontBlock(&block);
                 traverse(tree->right, block);
                 return 0;
@@ -512,6 +515,7 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             break;
         }
     }
+    return NULL;
 }
 
 void printOP(int op) {
@@ -556,7 +560,6 @@ void printToken(TOKEN *t) {
 }
 
 void printTac(BasicBlock *block) {
-    int depth = 0;
     while (block != NULL) {
         printf("-----NEW-BLOCK-----\n");
         Tac *t = block->tac;

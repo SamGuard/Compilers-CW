@@ -4,6 +4,7 @@ const char CODE_DATA[] =
     ".data\n"
     "args: .space 128 # Allocate 128 bytes for arguemnts\n"
     "func_def: .space 1024 # Allocate 1024 bytes for functions\n"
+    "closures: .space 1024 # Space to put closures\n"
     "exit_message: .asciiz \"Program exited with code: \"\n";
 const char CODE_START[] =
     ".text\n"
@@ -11,10 +12,11 @@ const char CODE_START[] =
     "main:\n";
 
 const char CODE_PRINT_AND_EXIT[] =
-    "la $a0, exit_message\n"
+    "add $s0, $2, $0 # Save exit value\n"
+    "la $a0, exit_message # Print exit message\n"
     "li $v0, 4\n"
     "syscall\n"
-    "add $4, $2, $0\n"
+    "add $4, $s0, $0 # Print exit value\n"
     "li $v0, 1\n"
     "syscall\n"
     "li $v0, 10\n"
@@ -24,12 +26,16 @@ char *CODE_FUNC_DEF;
 
 const char *ARGS_IDENT = "args";
 const char *FUNC_DEF_IDENT = "func_def";
+const char *CLOSURE_IDENT = "closures";
 FILE *file;  // File to write assembly to
 
 Frame *globalFrame;
 Block *globalDefBlock;
 
-Number *zero, *sp;
+Number *zero,      // Zero register
+    *sp,           // Stack pointer
+    *closCounter,  // Register for counting closures;
+    *fp;           // Frame pointer
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -41,6 +47,7 @@ Number *newNum(int addrMode, int value, Number *base) {
     n->value = value;
     n->base = base;
     n->framesBack = -1;
+    return n;
 }
 
 Binding *allocBinding(TOKEN *var, Value memLoc) {
@@ -51,6 +58,7 @@ Binding *allocBinding(TOKEN *var, Value memLoc) {
     newB->memLoc = memLoc;
     newB->var = var;
     newB->next = NULL;
+    return newB;
 }
 
 Frame *allocFrame() {
@@ -77,8 +85,8 @@ Block *allocBlock() {
     return block;
 }
 
-void addInstruction(Block *b, int op, Number *arg1, Number *arg2,
-                    Number *arg3) {
+void addInstruction(Block *b, int op, Number *arg1, Number *arg2, Number *arg3,
+                    char *comment) {
     Inst *i;
     if (b->head == NULL) {
         i = b->head = b->tail = (Inst *)malloc(sizeof(Inst));
@@ -93,6 +101,7 @@ void addInstruction(Block *b, int op, Number *arg1, Number *arg2,
     i->arg1 = arg1;
     i->arg2 = arg2;
     i->arg3 = arg3;
+    i->comment = comment;
     b->tail->next = i;
     b->tail = i;
 }
@@ -130,7 +139,6 @@ Value declare(TOKEN *var, Frame *f) {
 }
 
 Binding *getVar(TOKEN *var, Frame *f) {
-    int found = FALSE;
     Binding *b = f->b;
     while (b != NULL) {
         if (b->var == var) {
@@ -174,18 +182,36 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
     return n;
 }
 
+Frame *getFrameFromVar(TOKEN *var, Frame *f) {
+    int found = FALSE;
+    Binding *b = f->b;
+    while (b != NULL) {
+        if (b->var == var) {
+            return f;
+            break;
+        }
+        b = b->next;
+    }
+
+    if (f->next == NULL) {
+        printf("Variable not declared in this scope: %s\n", var->lexeme);
+        return NULL;
+    }
+    return getFrameFromVar(var, f->next);
+}
+
 // Returns a Number which is either immediate or register address
 // Adds instruction to load value to register if needed
 // Reg is the number to use to store the value in if needed
 void getArg(TOKEN *src, Block *b, Number *reg) {
-    Number *n;
     if (src->type == CONSTANT) {
         setRegister(src, b, reg);
-        n = reg;
     } else if (src->type == IDENTIFIER) {
-        n = reg;
         Number *memLocation = getVarLocation(src, b->frame);
-        addInstruction(b, INS_LW, reg, memLocation, NULL);
+        char *comment = "getArg: %s, memory offset: %d",
+             *comFormat = (char *)malloc(sizeof(char) * 1024);
+        sprintf(comFormat, comment, src->lexeme, memLocation->value);
+        addInstruction(b, INS_LW, reg, memLocation, NULL, comFormat);
     } else {
         printf("Invalid type in getArg\n");
     }
@@ -196,15 +222,13 @@ void setRegister(TOKEN *src, Block *b, Number *destReg) {
         Number
             // Hold the value 0
             *val = newNum(ADDR_IMM, src->value, NULL);
-        addInstruction(b, INS_ADD, destReg, zero, val);
+        addInstruction(b, INS_ADD, destReg, zero, val, NULL);
     } else if (src->type == IDENTIFIER) {
         getArg(src, b, destReg);
     } else {
         printf("Invalid type in setRegister %d\n", src->type);
     }
 }
-
-void setValue() {}
 
 void mathToInstruction(Block *b, int op, Tac *tac) {
     // regA, regB are used to store the two argument IF necessary. They are
@@ -220,14 +244,15 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
     getArg(tac->src2, b, regB);
 
     if (op == '*') {
-        addInstruction(b, op, regA, regB, NULL);
-        addInstruction(b, INS_MFLO, regC, NULL, NULL);
-        addInstruction(b, INS_SW, regC, dest, NULL);
+        char *com = "Multiplication";
+        addInstruction(b, op, regA, regB, NULL, com);
+        addInstruction(b, INS_MFLO, regC, NULL, NULL, com);
+        addInstruction(b, INS_SW, regC, dest, NULL, com);
         return;
     }
-
-    addInstruction(b, op, regC, regA, regB);
-    addInstruction(b, INS_SW, regC, dest, NULL);
+    char *com = "Maths and Logic";
+    addInstruction(b, op, regC, regA, regB, com);
+    addInstruction(b, INS_SW, regC, dest, NULL, com);
 }
 
 Block *traverseTac(BasicBlock *graph, Block *block) {
@@ -255,7 +280,11 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     // Load value into the register
                     setRegister(tacList->src1, b, destReg);
                     // Write the value in the register to the memory
-                    addInstruction(b, INS_SW, destReg, destMem, NULL);
+                    char *com = "Set %s",
+                         *comFormat = (char *)malloc(sizeof(char) * 1024);
+                    sprintf(comFormat, com, tacList->dest->lexeme);
+                    addInstruction(b, INS_SW, destReg, destMem, NULL,
+                                   comFormat);
                     break;
                 }
                 case '*':
@@ -271,7 +300,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     newFrame->next = block->frame;
                     block->frame = newFrame;
                     addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
-                                   NULL);
+                                   NULL, "Move scope down");
                     break;
                 }
                 case NEW_SCOPE: {
@@ -279,55 +308,60 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     newFrame->next = globalFrame;
                     block->frame = newFrame;
                     addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
-                                   NULL);
+                                   NULL, "Create new scope");
                     break;
                 }
                 case SCOPE_UP: {
                     Frame *oldFrame = block->frame;
                     block->frame = block->frame->next;
                     addInstruction(block, INS_SPU, (Number *)oldFrame, NULL,
-                                   NULL);
+                                   NULL, "Move scope up");
                     break;
                 }
                 case RETURN_SCOPE: {
                     if (block->tail->op == INS_JPR) {
                         break;
                     }
-                    Frame *currFrame = block->frame,
-                          *prevFrame = block->frame->next;
+                    Frame *currFrame = block->frame;
                     Number *stackPointer = newNum(ADDR_REG, REG_SP, NULL);
                     Number *frameSize;
                     while (currFrame->next != NULL) {
                         frameSize = newNum(
                             ADDR_IMM, currFrame->frameSize * WORD_SIZE, NULL);
                         addInstruction(block, INS_ADD, stackPointer,
-                                       stackPointer, frameSize);
+                                       stackPointer, frameSize,
+                                       "Return scope to original position");
                         currFrame = currFrame->next;
                     }
                     break;
                 }
-                case BRANCH:
+                case BRANCH: {
+                    char *com = "Jump to %s",
+                         *comFormat = (char *)malloc(sizeof(char) * 1024);
+                    sprintf(comFormat, com, "%s");
                     addInstruction(
                         block, INS_JMP,
                         newNum(ADDR_LBL, -1, (Number *)tacList->dest), NULL,
-                        NULL);
+                        NULL, comFormat);
                     break;
+                }
                 case BRANCH_FALSE: {
                     // Branch if the value is 0
                     // Register to load value into
+                    char *com = "Branch if 0";
                     Number *reg = newNum(ADDR_REG, REG_T_START, NULL);
                     getArg(tacList->src1, block, reg);
                     addInstruction(
                         block, INS_BZE,
                         newNum(ADDR_LBL, -1, (Number *)tacList->dest), reg,
-                        NULL);
+                        NULL, com);
                     break;
                 }
                 case LABEL:
                     addInstruction(
                         block, LABEL,
                         newNum(ADDR_LBL, -1, (Number *)tacList->dest), NULL,
-                        NULL);
+                        NULL, NULL);
                     break;
                 case DEFINE_FUNC_START: {
                     declare(tacList->dest, block->frame);
@@ -344,12 +378,43 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     Number *offset =
                                newNum(ADDR_IMM,
                                       tacList->dest->value * WORD_SIZE, NULL),
-                           *reg = newNum(ADDR_REG, REG_T_START, NULL),
                            *memLoc =
                                getVarLocation(tacList->dest, block->frame);
+                    Block *b =
+                        (block->frame == globalFrame) ? globalDefBlock : block;
 
-                    addInstruction(globalDefBlock, INS_ADD, reg, zero, offset);
-                    addInstruction(globalDefBlock, INS_SW, reg, memLoc, NULL);
+                    Number *closAddress =
+                               newNum(ADDR_IDT, -1, (Number *)CLOSURE_IDENT),
+                           *closAddressReg =
+                               newNum(ADDR_REG, REG_T_START, NULL);
+                    // Load closure space address
+                    addInstruction(b, INS_LA, closAddressReg, closAddress, NULL,
+                                   "Load closure space address");
+                    // At next free location (decided by closure counter
+                    // register) store offset and pointer to current frame at
+                    // this location
+                    addInstruction(b, INS_ADD, closAddressReg, closAddressReg,
+                                   closCounter, NULL);
+                    // Move offset to register
+                    Number *offsetReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
+                    addInstruction(b, INS_ADD, offsetReg, zero, offset,
+                                   "Put offset into register");
+                    addInstruction(b, INS_SW, offsetReg,
+                                   newNum(ADDR_BAS, 0, closAddressReg), NULL,
+                                   "Set offset for closure");
+                    addInstruction(b, INS_SW, sp,
+                                   newNum(ADDR_BAS, WORD_SIZE, closAddressReg),
+                                   NULL, "Set stack pointer for closure");
+                    // Set variables value to index in closure space
+                    char *com = "Set func %s definition",
+                         *comFormat = (char *)malloc(sizeof(char) * 1024);
+                    sprintf(comFormat, com, tacList->dest->lexeme);
+                    addInstruction(b, INS_SW, closCounter, memLoc, NULL,
+                                   comFormat);
+                    // Increment closure pointer 2 words
+                    addInstruction(b, INS_ADD, closCounter,
+                                   newNum(ADDR_IMM, 2 * WORD_SIZE, NULL), NULL,
+                                   "Increment closure counter");
 
                     Frame *funcFrame = allocFrame();
                     funcFrame->next = block->frame;
@@ -358,7 +423,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     addInstruction(
                         block, INS_JMP,
                         newNum(ADDR_LBL, -1, (Number *)tacList->src2), NULL,
-                        NULL);
+                        NULL, "Skip function as this is the definiton");
                     break;
                 }
                 case DEFINE_FUNC_END: {
@@ -366,10 +431,16 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                         perror("No more frames left");
                     }
                     block->frame = block->frame->next;
-                    if (block->tail->op != INS_JPR) {
-                        addInstruction(block, INS_JPR, NULL, NULL, NULL);
+                    if (block->tail->op == INS_JPR) {
+                        break;
                     }
-
+                }
+                case RETURN: {
+                    Number *sp = newNum(ADDR_REG, REG_SP, NULL),
+                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL);
+                    addInstruction(block, INS_ADD, sp, saveSP, zero,
+                                   "Restore previous stack pointer");
+                    addInstruction(block, INS_JPR, NULL, NULL, NULL, "Return");
                     break;
                 }
                 // RETURN ADDRESS
@@ -382,7 +453,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     Number *returnReg = newNum(ADDR_REG, REG_RA, NULL);
                     addInstruction(block, INS_SW, returnReg,
                                    getVarLocation(tacList->dest, block->frame),
-                                   NULL);
+                                   NULL, "Save return address");
                     break;
                 }
                 // RETURN ADDRESS
@@ -390,7 +461,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     Number *val = newNum(ADDR_REG, REG_RET, NULL),
                            *memLoc =
                                getVarLocation(tacList->dest, block->frame);
-                    addInstruction(block, INS_SW, val, memLoc, NULL);
+                    addInstruction(block, INS_SW, val, memLoc, NULL,
+                                   "Load return value");
                     break;
                 }
                 case SAVE_RET_VAL: {
@@ -408,59 +480,81 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     Number *spReg = newNum(ADDR_REG, REG_PSP, NULL);
                     addInstruction(block, INS_SW, spReg,
                                    getVarLocation(tacList->dest, block->frame),
-                                   NULL);
+                                   NULL, "Save memory pointer");
                     break;
                 }
                 case APPLY: {
-                    Number *funcOffset = newNum(ADDR_REG, REG_T_START, NULL);
-                    getArg(tacList->dest, block, funcOffset);
+                    // Get function index in closure
+                    Number *closBytesAlong =
+                        newNum(ADDR_REG, REG_T_START, NULL);
+                    getArg(tacList->dest, block, closBytesAlong);
+
+                    // Load closure space address
+                    Number *closAddress = newNum(ADDR_IDT, -1, CLOSURE_IDENT),
+                           *closAddressReg =
+                               newNum(ADDR_REG, REG_T_START + 1, NULL);
+                    addInstruction(block, INS_LA, closAddressReg, closAddress,
+                                   NULL, "Load closure space address");
+
+                    // Add index to closure address
+                    addInstruction(block, INS_ADD, closAddressReg,
+                                   closAddressReg, closBytesAlong,
+                                   "Move pointer to closure index");
+
+                    // Set function offset to register
+                    Number *funcOffsetReg =
+                        newNum(ADDR_REG, REG_T_START + 2, NULL);
+                    addInstruction(block, INS_LW, funcOffsetReg,
+                                   newNum(ADDR_BAS, 0, closAddressReg), NULL,
+                                   "Load offset into register");
+                    // Set frame pointer to pointer in closure
+                    addInstruction(block, INS_LW, fp,
+                                   newNum(ADDR_BAS, WORD_SIZE, closAddressReg),
+                                   NULL, "Set frame pointer");
+
                     // Get identifier for static function definitions
                     Number *funcDefSpaceIdent =
                         newNum(ADDR_IDT, 0, (Number *)FUNC_DEF_IDENT);
 
                     // Place to store the address of the function definitions
-                    Number *funcAddrReg =
-                        newNum(ADDR_REG, REG_T_START + 1, NULL);
+                    Number *funcAddrReg = newNum(ADDR_REG, REG_T_START, NULL);
 
                     // Load the address
                     addInstruction(block, INS_LA, funcAddrReg,
-                                   funcDefSpaceIdent, NULL);
+                                   funcDefSpaceIdent, NULL,
+                                   "Load func_def address");
                     // Add the offset for this specific function, decided in TAC
                     addInstruction(block, INS_ADD, funcAddrReg, funcAddrReg,
-                                   funcOffset);
+                                   funcOffsetReg, "Add offset to it");
                     // Full address of where the function defintion is stored
                     Number *fullFuncAddress = newNum(ADDR_BAS, 0, funcAddrReg);
                     // Load address of the function start into register
                     addInstruction(block, INS_LW, funcAddrReg, fullFuncAddress,
-                                   NULL);
+                                   NULL, "Load function definition");
 
                     // Save the stack pointer in memory
                     Number *saveSP = newNum(ADDR_REG, REG_PSP, NULL);
-                    addInstruction(block, INS_ADD, saveSP, sp, zero);
+                    addInstruction(block, INS_ADD, saveSP, sp, zero,
+                                   "Copy stack pointer to save it");
 
                     // Allocate new stack space for function call
                     Number *v0 = newNum(ADDR_REG, REG_RET, NULL),
                            *sysArg = newNum(ADDR_IMM, 9, NULL),
                            *a0 = newNum(ADDR_REG, REG_ARG_START, NULL),
                            *memSize = newNum(ADDR_IMM, 1024, NULL);
-                    // Load syscall number and amount of memory to be allocated into registers
-                    addInstruction(block, INS_ADD, v0, zero, sysArg);
-                    addInstruction(block, INS_ADD, a0, zero, memSize);
+                    // Load syscall number and amount of memory to be
+                    // allocated into registers
+                    addInstruction(block, INS_ADD, v0, zero, sysArg, "sbreak");
+                    addInstruction(block, INS_ADD, a0, zero, memSize,
+                                   "Amount to allocate");
                     // Call syscall
-                    addInstruction(block, INS_SYS, NULL, NULL, NULL);
+                    addInstruction(block, INS_SYS, NULL, NULL, NULL, NULL);
                     // Set return value to stack pointer
-                    addInstruction(block, INS_ADD, sp, v0, zero);
-
-
+                    addInstruction(block, INS_ADD, sp, v0, zero,
+                                   "Move stack pointer to new address");
                     // Jump to function instructions
-                    addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL);
-                    break;
-                }
-                case RETURN: {
-                    Number *sp = newNum(ADDR_REG, REG_SP, NULL),
-                           *saveSP = newNum(ADDR_REG, REG_PSP, NULL);
-                    addInstruction(block, INS_ADD, sp, saveSP, zero);
-                    addInstruction(block, INS_JPR, NULL, NULL, NULL);
+                    addInstruction(block, INS_JAL, funcAddrReg, NULL, NULL,
+                                   NULL);
                     break;
                 }
                 case DEC_ARG: {
@@ -470,7 +564,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                            *argsAddrReg = newNum(ADDR_REG, REG_T_START, NULL);
 
                     addInstruction(block, INS_LA, argsAddrReg, argsAddress,
-                                   NULL);
+                                   NULL, "Get pointer to arguemnt store");
 
                     // Put arg value in register
                     Number *varReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
@@ -479,7 +573,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     Number *addrRegPlusOff =
                         newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
 
-                    addInstruction(block, INS_SW, varReg, addrRegPlusOff, NULL);
+                    addInstruction(block, INS_SW, varReg, addrRegPlusOff, NULL,
+                                   "Store arguements value in static memory");
                     break;
                 }
                 case DEF_PARAM: {
@@ -491,19 +586,22 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                            *argsAddrReg = newNum(ADDR_REG, REG_T_START, NULL);
 
                     addInstruction(block, INS_LA, argsAddrReg, argsAddress,
-                                   NULL);
+                                   NULL,
+                                   "Load address for the args static memory");
 
                     // Move value to register
                     Number *valReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
                     Number *addrRegPlusOff =
                         newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
 
-                    addInstruction(block, INS_LW, valReg, addrRegPlusOff, NULL);
+                    addInstruction(block, INS_LW, valReg, addrRegPlusOff, NULL,
+                                   "Load arguement into register");
                     getVarLocation(tacList->src1, block->frame);
                     Number *paramLoc =
                         getVarLocation(tacList->src1, block->frame);
 
-                    addInstruction(block, INS_SW, valReg, paramLoc, NULL);
+                    addInstruction(block, INS_SW, valReg, paramLoc, NULL,
+                                   "Store arguement value into memory");
                     break;
                 }
             }
@@ -598,42 +696,36 @@ void printBranch(char *ins, Frame *f, Number *label, Number *val) {
 
     if (label->addrMode != ADDR_LBL) {
         printNum(f, label);
-        fprintf(file, "\n");
         return;
     }
 
     printLabel(label->base);
-    fprintf(file, "\n");
 }
 
 void printMoveStack(int bytesToMove) {
-    fprintf(file, "add $%d, $%d, %d\n", REG_SP, REG_SP, bytesToMove);
+    fprintf(file, "add $%d, $%d, %d", REG_SP, REG_SP, bytesToMove);
 }
 
 void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
                       Number *arg3) {
     fprintf(file, "%s ", ins);
     if (arg1 == NULL) {
-        fprintf(file, "\n");
         return;
     }
     printNum(f, arg1);
     if (arg2 == NULL) {
-        fprintf(file, "\n");
         return;
     }
     fprintf(file, ", ");
     printNum(f, arg2);
     if (arg3 == NULL) {
-        fprintf(file, "\n");
         return;
     }
     fprintf(file, ", ");
     printNum(f, arg3);
-    fprintf(file, "\n");
 }
 
-void printIndent(unsigned int depth) {
+void printIndent(int depth) {
     for (int i = 0; i < depth; i++) {
         fprintf(file, "   ");
     }
@@ -687,7 +779,7 @@ void printInstructions(Block *code) {
                     break;
                 case LABEL:
                     printLabel(i->arg1->base);
-                    fprintf(file, ":\n");
+                    fprintf(file, ":");
                     break;
                 case INS_SPD:
                     currFrame = (Frame *)i->arg1;
@@ -711,6 +803,11 @@ void printInstructions(Block *code) {
                     break;
                 case INS_SYS:
                     printInstruction("syscall", currFrame, NULL, NULL, NULL);
+            }
+            if (i->comment != NULL) {
+                fprintf(file, " # %s\n", i->comment);
+            } else {
+                fprintf(file, "\n");
             }
             i = i->next;
         }
@@ -745,6 +842,8 @@ void toMachineCode(BasicBlock *tree) {
     // Define constant registers
     zero = newNum(ADDR_REG, 0, NULL);
     sp = newNum(ADDR_REG, REG_SP, NULL);
+    closCounter = newNum(ADDR_REG, REG_CLS, NULL);
+    fp = newNum(ADDR_REG, REG_FP, NULL);
     CODE_FUNC_DEF = (char *)malloc(4096 * sizeof(char));
     CODE_FUNC_DEF[0] = '\0';
     strcat(CODE_FUNC_DEF,
