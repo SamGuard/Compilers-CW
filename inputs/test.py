@@ -29,7 +29,8 @@ files = [
             ["lexscope1.c", "126"],
             ["lexscope2.c", "11"],
             ["lexscope3.c", "5"],
-            ["lexscope4.c", "6"]
+            ["lexscope4.c", "6"],
+            ["lexscope5.c", "3"]
         ]
 
 class TestInterpreter:
