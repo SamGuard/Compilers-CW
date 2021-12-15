@@ -3,7 +3,7 @@ int f(function func, int arg){
 }
 
 int main(){
-  function a(x){
+  function a(int x){
     return x + 123;
   }
   return f(a, 2);

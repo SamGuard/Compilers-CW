@@ -45,7 +45,7 @@ j _L1 # Skip function as this is the definiton
 f:
 add $16, $16, -24 # Create new scope
 la $8, args # Load address for the args static memory
-lw $9, 1($8) # Load arguement into register
+lw $9, 4($8) # Load arguement into register
 sw $9, 0($16) # Store arguement value into memory
 la $8, args # Load address for the args static memory
 lw $9, 0($8) # Load arguement into register
@@ -95,13 +95,16 @@ sw $18, 0($16) # Set func a definition
 add $18, 8 # Increment closure counter
 j _L5 # Skip function as this is the definiton
 a:
-add $16, $16, -4 # Move scope down
-lw $8, 0 # getArg: x, memory offset: 0
+add $16, $16, -8 # Move scope down
+la $8, args # Load address for the args static memory
+lw $9, 0($8) # Load arguement into register
+sw $9, 0($16) # Store arguement value into memory
+lw $8, 0($16) # getArg: x, memory offset: 0
 add $9, $0, 123
 add $10, $8, $9 # Maths and Logic
-sw $10, 0($16) # Maths and Logic
-lw $2, 0($16) # getArg: _T, memory offset: 0
-add $16, $16, 4 # Return scope to original position
+sw $10, 4($16) # Maths and Logic
+lw $2, 4($16) # getArg: _T, memory offset: 1
+add $16, $16, 8 # Return scope to original position
 add $16, $16, 4 # Return scope to original position
 add $16, $17, $0 # Restore previous stack pointer
 jr $ra  # Return
@@ -111,7 +114,7 @@ sw $17, 12($16) # Save memory pointer
 add $16, $16, 0 # Move scope down
 la $8, args # Get pointer to arguemnt store
 lw $9, 0($16) # getArg: a, memory offset: 0
-sw $9, 1($8) # Store arguements value in static memory
+sw $9, 4($8) # Store arguements value in static memory
 la $8, args # Get pointer to arguemnt store
 add $9, $0, 2
 sw $9, 0($8) # Store arguements value in static memory

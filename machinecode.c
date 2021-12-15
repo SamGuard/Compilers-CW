@@ -571,7 +571,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     getArg(tacList->src1, block, varReg);
 
                     Number *addrRegPlusOff =
-                        newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
+                        newNum(ADDR_BAS, tacList->dest->value * WORD_SIZE, argsAddrReg);
 
                     addInstruction(block, INS_SW, varReg, addrRegPlusOff, NULL,
                                    "Store arguements value in static memory");
@@ -592,7 +592,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     // Move value to register
                     Number *valReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
                     Number *addrRegPlusOff =
-                        newNum(ADDR_BAS, tacList->dest->value, argsAddrReg);
+                        newNum(ADDR_BAS, tacList->dest->value * WORD_SIZE, argsAddrReg);
 
                     addInstruction(block, INS_LW, valReg, addrRegPlusOff, NULL,
                                    "Load arguement into register");
