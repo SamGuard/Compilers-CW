@@ -245,15 +245,25 @@ void mathToInstruction(Block *b, int op, Tac *tac) {
            *regC = newNum(ADDR_REG, REG_T_START + 2, NULL),
            *dest = getVarLocation(tac->dest, b->frame);
     getArg(tac->src1, b, regA);
-    getArg(tac->src2, b, regB);
+    if (tac->src2 != NULL) {
+        getArg(tac->src2, b, regB);
+    }
 
-    if (op == '*') {
-        char *com = "Multiplication";
+    if (op == '*' || op == '/') {
+        char *com = "Multiplication/Division";
         addInstruction(b, op, regA, regB, NULL, com);
         addInstruction(b, INS_MFLO, regC, NULL, NULL, com);
         addInstruction(b, INS_SW, regC, dest, NULL, com);
         return;
     }
+    if(op == '%'){
+        char *com = "Modulo";
+        addInstruction(b, '/', regA, regB, NULL, com);
+        addInstruction(b, INS_MFHI, regC, NULL, NULL, com);
+        addInstruction(b, INS_SW, regC, dest, NULL, com);
+        return;
+    }
+
     char *com = "Maths and Logic";
     addInstruction(b, op, regC, regA, regB, com);
     addInstruction(b, INS_SW, regC, dest, NULL, com);
@@ -292,10 +302,15 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case '*':
+                case '/':
                 case '+':
                 case '-':
-                case EQ_OP:
                 case '<':
+                case '%':
+                case EQ_OP:
+                case NE_OP:
+                case GE_OP:
+                case LE_OP:
                     mathToInstruction(block, tacList->op, tacList);
                     break;
 
@@ -847,6 +862,14 @@ void printInstructions(Block *code) {
                     printInstruction("sub", currFrame, i->arg1, i->arg2,
                                      i->arg3);
                     break;
+                case '*':
+                    printInstruction("mult", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
+                    break;
+                case '/':
+                    printInstruction("div", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
+                    break;
                 case EQ_OP:
                     printInstruction("seq", currFrame, i->arg1, i->arg2,
                                      i->arg3);
@@ -855,8 +878,18 @@ void printInstructions(Block *code) {
                     printInstruction("slt", currFrame, i->arg1, i->arg2,
                                      i->arg3);
                     break;
-                case '*':
-                    printInstruction("mult", currFrame, i->arg1, i->arg2, NULL);
+                case '>':
+                    printInstruction("sgt", currFrame, i->arg1, i->arg2,
+                                     i->arg3);
+                    break;
+                case NE_OP:
+                    printInstruction("sne", currFrame, i->arg1, i->arg2, i->arg3);
+                    break;
+                case GE_OP:
+                    printInstruction("sge", currFrame, i->arg1, i->arg2, i->arg3);
+                    break;
+                case LE_OP:
+                    printInstruction("sle", currFrame, i->arg1, i->arg2, i->arg3);
                     break;
                 case INS_MFHI:
                     printInstruction("mfhi", currFrame, i->arg1, NULL, NULL);

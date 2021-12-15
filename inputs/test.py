@@ -6,7 +6,8 @@ import re
 interpreter = "./bin/interpreter"
 machine = "./bin/MachineCode"
 runShell = "./inputs/test.sh"
-files = [
+files = [   
+            ["operators.c", "1"],
             ["basic1.c", "0"],
             ["basic2.c", "5"],
             ["basic3.c", "4"],
