@@ -35,7 +35,9 @@ Block *globalDefBlock;
 Number *zero,      // Zero register
     *sp,           // Stack pointer
     *closCounter,  // Register for counting closures;
-    *fp;           // Frame pointer
+    *fp,           // Frame pointer
+    *fps;          // FPS
+TOKEN *prevChainLoc;
 
 Number *newNum(int addrMode, int value, Number *base) {
     Number *n = (Number *)malloc(sizeof(Number));
@@ -300,11 +302,19 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 case SCOPE_DOWN_FUNC:
                 case SCOPE_DOWN: {
                     Frame *newFrame = allocFrame();
-                    newFrame->isRoot = tacList->op == SCOPE_DOWN_FUNC;
                     newFrame->next = block->frame;
                     block->frame = newFrame;
                     addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
                                    NULL, "Move scope down");
+                    if (tacList->op == SCOPE_DOWN_FUNC) {
+                        newFrame->isRoot = TRUE;
+                        declare(prevChainLoc, newFrame);
+                        // Save previous chain location into memory
+                        addInstruction(
+                            block, INS_SW, fp,
+                            getVarLocation(prevChainLoc, newFrame), NULL,
+                            "Save previous chain location into memory");
+                    }
                     break;
                 }
                 case NEW_SCOPE: {
@@ -656,7 +666,7 @@ void printNum(Frame *f, Number *n) {
             } else if (base->addrMode == ADDR_REG && base->value == REG_GP)
                 fprintf(file, "%d(", WORD_SIZE * n->value);
             else
-                fprintf(file, "%d(", n->value);
+                fprintf(file, "%d(", WORD_SIZE * n->value);
             printNum(f, n->base);
             fprintf(file, ")");
             break;
@@ -741,7 +751,67 @@ void printLoadStore(Inst *ins, Frame *f) {
         dest->base->value = REG_FP;
         printInstruction(ins->op == INS_SW ? "sw" : "lw", f, ins->arg1,
                          ins->arg2, NULL);
+        return;
     }
+
+    // Move frame back until correct frame is reached
+    Frame *currFrame = f;  // Current frame
+    int chainsPassed = 0;  // How many chains have passed
+    Inst i;
+    i.op = INS_LW;
+    i.arg1 = newNum(ADDR_REG, REG_FPS, NULL);
+    i.arg2 = newNum(ADDR_BAS, 0, newNum(ADDR_REG, REG_FPS, NULL));
+    i.arg3 = NULL;
+
+    // Move previous chain pointer into register
+    printInstruction("add", currFrame, newNum(ADDR_REG, REG_FPS, NULL),
+                     newNum(ADDR_REG, REG_FP, NULL), zero);
+    fprintf(file, "# Move previous chain location into FPS register\n");
+
+    // Convert bytes back into indexs
+    int varOffset = calcVariableOffset(f, dest) / WORD_SIZE;
+
+    while (currFrame->isRoot != TRUE) {
+        varOffset -= currFrame->frameSize;
+        currFrame = currFrame->next;
+    }
+    varOffset -= currFrame->frameSize;
+    currFrame = currFrame->next;
+    {
+        // Relative location to the current stack pointer
+        Number *memLoc = getVarLocation(prevChainLoc, currFrame);
+        // Switch register to FPS register
+        i.arg2->value = memLoc->value;
+        free(memLoc);
+        // Load next chain pointer into FPS register
+        printInstruction("lw", currFrame, i.arg1, i.arg2, NULL);
+        fprintf(file, "# Getting Variable from different chain\n");
+    }
+
+    while (1 == 1) {
+        varOffset -= currFrame->frameSize;
+        if (currFrame->isRoot == TRUE) {
+            currFrame = currFrame->next;
+            chainsPassed++;
+            if (chainsPassed == dest->chainsBack - 1) {
+                break;
+            }
+
+            // Relative location to the current stack pointer
+            Number *memLoc = getVarLocation(prevChainLoc, currFrame);
+            // Switch register to FPS register
+            i.arg2->value = memLoc->value;
+            free(memLoc);
+            // Load next chain pointer into FPS register
+            printInstruction("lw", currFrame, i.arg1, i.arg2, NULL);
+            fprintf(file, "# Getting Variable from different chain\n");
+        } else {
+            currFrame = currFrame->next;
+        }
+    }
+    i.arg2->value = varOffset;
+    printInstruction(ins->op == INS_SW ? "sw" : "lw", currFrame, ins->arg1,
+                     (&i)->arg2, NULL);
 }
 
 void printIndent(int depth) {
@@ -861,6 +931,14 @@ void toMachineCode(BasicBlock *tree) {
     sp = newNum(ADDR_REG, REG_SP, NULL);
     closCounter = newNum(ADDR_REG, REG_CLS, NULL);
     fp = newNum(ADDR_REG, REG_FP, NULL);
+    fps = newNum(ADDR_REG, REG_FPS, NULL);
+    // ------
+
+    // Define constant variable names
+    prevChainLoc = (TOKEN *)malloc(sizeof(TOKEN));
+    if (prevChainLoc == NULL) {
+        printf("could not allocate token in toMachineCode\n");
+    }
     CODE_FUNC_DEF = (char *)malloc(4096 * sizeof(char));
     CODE_FUNC_DEF[0] = '\0';
     strcat(CODE_FUNC_DEF,

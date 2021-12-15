@@ -1,7 +1,7 @@
 int getFuncFunc(){
-  int a = 1;
+  int a = 4;
   function getFunc(){
-    int b = 1;
+    int b = 2;
     int f(){
       return a + b;
     }

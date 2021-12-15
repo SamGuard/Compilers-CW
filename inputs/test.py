@@ -5,13 +5,14 @@ import re
 #BINARY_PATH = "bin/mycc"
 interpreter = "./bin/interpreter"
 machine = "./bin/MachineCode"
-runShell = "./run.sh"
+runShell = "./inputs/test.sh"
 files = [
             ["basic1.c", "0"],
             ["basic2.c", "5"],
+            ["basic3.c", "4"],
             ["branch1.c", "100"],
             ["branch2.c", "-1"],
-            ["count.c", "1000000"],
+            ["count.c", "100"],
             ["factorial.c", "3628800"],
             ["functions1.c", "10"],
             ["functions2.c", "1"],
@@ -24,7 +25,10 @@ files = [
             #["loop2.c", "20"],
             ["loop3.c", "2001"],
             ["slp1.c", "0"],
-            ["lexscope1.c", "126"]
+            ["lexscope1.c", "126"],
+            ["lexscope2.c", "11"],
+            ["lexscope3.c", "5"],
+            ["lexscope4.c", "6"]
         ]
 
 class TestInterpreter:
