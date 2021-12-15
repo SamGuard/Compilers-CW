@@ -297,8 +297,10 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     mathToInstruction(block, tacList->op, tacList);
                     break;
 
+                case SCOPE_DOWN_FUNC:
                 case SCOPE_DOWN: {
                     Frame *newFrame = allocFrame();
+                    newFrame->isRoot = tacList->op == SCOPE_DOWN_FUNC;
                     newFrame->next = block->frame;
                     block->frame = newFrame;
                     addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
@@ -307,7 +309,6 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                 }
                 case NEW_SCOPE: {
                     Frame *newFrame = allocFrame();
-                    newFrame->isRoot = TRUE;
                     newFrame->next = globalFrame;
                     block->frame = newFrame;
                     addInstruction(block, INS_SPD, (Number *)newFrame, NULL,
@@ -325,14 +326,13 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     if (block->tail->op == INS_JPR) {
                         break;
                     }
-                    Frame *currFrame = block->frame,
-                    *prevFrame = NULL;                    
+                    Frame *currFrame = block->frame, *prevFrame = NULL;
                     Number *frameSize;
-                    while (currFrame != globalFrame && (prevFrame == NULL || prevFrame->isRoot == FALSE)) {
+                    while (currFrame != globalFrame &&
+                           (prevFrame == NULL || prevFrame->isRoot == FALSE)) {
                         frameSize = newNum(
                             ADDR_IMM, currFrame->frameSize * WORD_SIZE, NULL);
-                        addInstruction(block, INS_ADD, sp,
-                                       sp, frameSize,
+                        addInstruction(block, INS_ADD, sp, sp, frameSize,
                                        "Return scope to original position");
                         prevFrame = currFrame;
                         currFrame = currFrame->next;
@@ -427,7 +427,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     break;
                 }
                 case DEFINE_FUNC_END: {
-                    if(block->frame->next == NULL){
+                    if (block->frame->next == NULL) {
                         perror("No more frames");
                     }
                     block->frame = block->frame->next;
@@ -490,7 +490,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     getArg(tacList->dest, block, closBytesAlong);
 
                     // Load closure space address
-                    Number *closAddress = newNum(ADDR_IDT, -1, (Number*)CLOSURE_IDENT),
+                    Number *closAddress =
+                               newNum(ADDR_IDT, -1, (Number *)CLOSURE_IDENT),
                            *closAddressReg =
                                newNum(ADDR_REG, REG_T_START + 1, NULL);
                     addInstruction(block, INS_LA, closAddressReg, closAddress,
@@ -571,7 +572,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     getArg(tacList->src1, block, varReg);
 
                     Number *addrRegPlusOff =
-                        newNum(ADDR_BAS, tacList->dest->value * WORD_SIZE, argsAddrReg);
+                        newNum(ADDR_BAS, tacList->dest->value * WORD_SIZE,
+                               argsAddrReg);
 
                     addInstruction(block, INS_SW, varReg, addrRegPlusOff, NULL,
                                    "Store arguements value in static memory");
@@ -592,7 +594,8 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                     // Move value to register
                     Number *valReg = newNum(ADDR_REG, REG_T_START + 1, NULL);
                     Number *addrRegPlusOff =
-                        newNum(ADDR_BAS, tacList->dest->value * WORD_SIZE, argsAddrReg);
+                        newNum(ADDR_BAS, tacList->dest->value * WORD_SIZE,
+                               argsAddrReg);
 
                     addInstruction(block, INS_LW, valReg, addrRegPlusOff, NULL,
                                    "Load arguement into register");
@@ -612,7 +615,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
     return block;
 }
 
-// ------------------------------PRINTING-------------------
+// ------------------------------OUTPUT-------------------
 
 // Returns the amount bytes to move back to find a variable in a different frame
 int calcVariableOffset(Frame *f, Number *n) {
@@ -648,9 +651,9 @@ void printNum(Frame *f, Number *n) {
             break;
         case ADDR_BAS: {
             Number *base = n->base;
-            if (base->addrMode == ADDR_REG && base->value == REG_SP)
+            if (base->addrMode == ADDR_REG && base->value == REG_SP) {
                 fprintf(file, "%d(", calcVariableOffset(f, n));
-            else if (base->addrMode == ADDR_REG && base->value == REG_GP)
+            } else if (base->addrMode == ADDR_REG && base->value == REG_GP)
                 fprintf(file, "%d(", WORD_SIZE * n->value);
             else
                 fprintf(file, "%d(", n->value);
@@ -725,6 +728,22 @@ void printInstruction(char *ins, Frame *f, Number *arg1, Number *arg2,
     printNum(f, arg3);
 }
 
+void printLoadStore(Inst *ins, Frame *f) {
+    Number *dest = ins->arg2;
+    if (dest->addrMode != ADDR_BAS || dest->base->value != REG_SP ||
+        dest->chainsBack == 0) {
+        printInstruction(ins->op == INS_SW ? "sw" : "lw", f, ins->arg1,
+                         ins->arg2, NULL);
+        return;
+    }
+
+    if (dest->chainsBack == 1) {
+        dest->base->value = REG_FP;
+        printInstruction(ins->op == INS_SW ? "sw" : "lw", f, ins->arg1,
+                         ins->arg2, NULL);
+    }
+}
+
 void printIndent(int depth) {
     for (int i = 0; i < depth; i++) {
         fprintf(file, "   ");
@@ -744,10 +763,8 @@ void printInstructions(Block *code) {
                     perror("Invalid instruction");
                     break;
                 case INS_SW:
-                    printInstruction("sw", currFrame, i->arg1, i->arg2, NULL);
-                    break;
                 case INS_LW:
-                    printInstruction("lw", currFrame, i->arg1, i->arg2, NULL);
+                    printLoadStore(i, currFrame);
                     break;
                 case INS_LA:
                     printInstruction("la", currFrame, i->arg1, i->arg2, NULL);

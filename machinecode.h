@@ -42,7 +42,7 @@
 #define REG_SP 16      // Which register holds the stack pointer
 #define REG_PSP 17  // Previous stack pointer to return to after function call
 #define REG_CLS 18  // Closure counter register
-#define REG_GP 28   // Which register holds the global pointer
+#define REG_GP 28   // Register holds the global pointer
 #define REG_FP 30   // Used to point to previous frames data
 #define REG_RA 31   // Return Address
 

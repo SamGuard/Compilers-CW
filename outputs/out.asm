@@ -9,16 +9,18 @@ main:
 la $t0, func_def
 la $t1, main0
 sw $t1, 0($t0)
-la $t1, f
+la $t1, getFuncFunc
 sw $t1, 4($t0)
-la $t1, a
+la $t1, getFunc
 sw $t1, 8($t0)
+la $t1, f
+sw $t1, 12($t0)
 la $8, closures # Load closure space address
 add $8, $8, $18
 add $9, $0, 4 # Put offset into register
 sw $9, 0($8) # Set offset for closure
 sw $16, 4($8) # Set stack pointer for closure
-sw $18, 0($28) # Set func f definition
+sw $18, 0($28) # Set func getFuncFunc definition
 add $18, 8 # Increment closure counter
 la $8, closures # Load closure space address
 add $8, $8, $18
@@ -42,21 +44,50 @@ syscall
 li $v0, 10
 syscall
 j _L1 # Skip function as this is the definiton
+getFuncFunc:
+add $16, $16, -20 # Create new scope
+add $8, $0, 1
+sw $8, 0($16) # Set a
+la $8, closures # Load closure space address
+add $8, $8, $18
+add $9, $0, 8 # Put offset into register
+sw $9, 0($8) # Set offset for closure
+sw $16, 4($8) # Set stack pointer for closure
+sw $18, 4($16) # Set func getFunc definition
+add $18, 8 # Increment closure counter
+j _L3 # Skip function as this is the definiton
+getFunc:
+add $16, $16, -8 # Move scope down
+add $8, $0, 1
+sw $8, 0($16) # Set b
+la $8, closures # Load closure space address
+add $8, $8, $18
+add $9, $0, 12 # Put offset into register
+sw $9, 0($8) # Set offset for closure
+sw $16, 4($8) # Set stack pointer for closure
+sw $18, 4($16) # Set func f definition
+add $18, 8 # Increment closure counter
+j _L5 # Skip function as this is the definiton
 f:
-add $16, $16, -24 # Create new scope
-la $8, args # Load address for the args static memory
-lw $9, 4($8) # Load arguement into register
-sw $9, 0($16) # Store arguement value into memory
-la $8, args # Load address for the args static memory
-lw $9, 0($8) # Load arguement into register
-sw $9, 4($16) # Store arguement value into memory
-sw $31, 16($16) # Save return address
-sw $17, 20($16) # Save memory pointer
+add $16, $16, -4 # Move scope down
+ # getArg: a, memory offset: 0
+lw $9, 0($30) # getArg: b, memory offset: 0
+add $10, $8, $9 # Maths and Logic
+sw $10, 0($16) # Maths and Logic
+lw $2, 0($16) # getArg: _T, memory offset: 0
+add $16, $16, 4 # Return scope to original position
+add $16, $17, $0 # Restore previous stack pointer
+jr $ra  # Return
+_L5:
+lw $2, 4($16) # getArg: f, memory offset: 1
+add $16, $16, 8 # Return scope to original position
+add $16, $17, $0 # Restore previous stack pointer
+jr $ra  # Return
+_L3:
+sw $31, 12($16) # Save return address
+sw $17, 16($16) # Save memory pointer
 add $16, $16, 0 # Move scope down
-la $8, args # Get pointer to arguemnt store
-lw $9, 4($16) # getArg: arg, memory offset: 1
-sw $9, 0($8) # Store arguements value in static memory
-lw $8, 0($16) # getArg: func, memory offset: 0
+lw $8, 4($16) # getArg: getFunc, memory offset: 1
 la $9, closures # Load closure space address
 add $9, $9, $8 # Move pointer to closure index
 lw $10, 0($9) # Load offset into register
@@ -70,55 +101,22 @@ add $4, $0, 1024 # Amount to allocate
 syscall 
 add $16, $2, $0 # Move stack pointer to new address
 jal $8
-sw $2, 12($16) # Load return value
+sw $2, 8($16) # Load return value
 add $16, $16, 0 # Move scope up
-lw $31, 16($16) # getArg: RA, memory offset: 4
-lw $17, 20($16) # getArg: MP, memory offset: 5
-lw $8, 12($16) # getArg: _T, memory offset: 3
-add $9, $0, 1
-add $10, $8, $9 # Maths and Logic
-sw $10, 8($16) # Maths and Logic
+lw $31, 12($16) # getArg: RA, memory offset: 3
+lw $17, 16($16) # getArg: MP, memory offset: 4
 lw $2, 8($16) # getArg: _T, memory offset: 2
-add $16, $16, 24 # Return scope to original position
+add $16, $16, 20 # Return scope to original position
 add $16, $17, $0 # Restore previous stack pointer
 jr $ra  # Return
 _L1:
-j _L3 # Skip function as this is the definiton
+j _L7 # Skip function as this is the definiton
 main0:
-add $16, $16, -16 # Create new scope
-la $8, closures # Load closure space address
-add $8, $8, $18
-add $9, $0, 8 # Put offset into register
-sw $9, 0($8) # Set offset for closure
-sw $16, 4($8) # Set stack pointer for closure
-sw $18, 0($16) # Set func a definition
-add $18, 8 # Increment closure counter
-j _L5 # Skip function as this is the definiton
-a:
-add $16, $16, -8 # Move scope down
-la $8, args # Load address for the args static memory
-lw $9, 0($8) # Load arguement into register
-sw $9, 0($16) # Store arguement value into memory
-lw $8, 0($16) # getArg: x, memory offset: 0
-add $9, $0, 123
-add $10, $8, $9 # Maths and Logic
-sw $10, 4($16) # Maths and Logic
-lw $2, 4($16) # getArg: _T, memory offset: 1
-add $16, $16, 8 # Return scope to original position
-add $16, $16, 4 # Return scope to original position
-add $16, $17, $0 # Restore previous stack pointer
-jr $ra  # Return
-_L5:
+add $16, $16, -28 # Create new scope
 sw $31, 8($16) # Save return address
 sw $17, 12($16) # Save memory pointer
 add $16, $16, 0 # Move scope down
-la $8, args # Get pointer to arguemnt store
-lw $9, 0($16) # getArg: a, memory offset: 0
-sw $9, 4($8) # Store arguements value in static memory
-la $8, args # Get pointer to arguemnt store
-add $9, $0, 2
-sw $9, 0($8) # Store arguements value in static memory
-lw $8, 0($28) # getArg: f, memory offset: 0
+lw $8, 0($28) # getArg: getFuncFunc, memory offset: 0
 la $9, closures # Load closure space address
 add $9, $9, $8 # Move pointer to closure index
 lw $10, 0($9) # Load offset into register
@@ -136,8 +134,31 @@ sw $2, 4($16) # Load return value
 add $16, $16, 0 # Move scope up
 lw $31, 8($16) # getArg: RA, memory offset: 2
 lw $17, 12($16) # getArg: MP, memory offset: 3
-lw $2, 4($16) # getArg: _T, memory offset: 1
-add $16, $16, 16 # Return scope to original position
+lw $8, 4($16) # getArg: _T, memory offset: 1
+sw $8, 0($16) # Set f
+sw $31, 20($16) # Save return address
+sw $17, 24($16) # Save memory pointer
+add $16, $16, 0 # Move scope down
+lw $8, 0($16) # getArg: f, memory offset: 0
+la $9, closures # Load closure space address
+add $9, $9, $8 # Move pointer to closure index
+lw $10, 0($9) # Load offset into register
+lw $30, 4($9) # Set frame pointer
+la $8, func_def # Load func_def address
+add $8, $8, $10 # Add offset to it
+lw $8, 0($8) # Load function definition
+add $17, $16, $0 # Copy stack pointer to save it
+add $2, $0, 9 # sbreak
+add $4, $0, 1024 # Amount to allocate
+syscall 
+add $16, $2, $0 # Move stack pointer to new address
+jal $8
+sw $2, 16($16) # Load return value
+add $16, $16, 0 # Move scope up
+lw $31, 20($16) # getArg: RA, memory offset: 5
+lw $17, 24($16) # getArg: MP, memory offset: 6
+lw $2, 16($16) # getArg: _T, memory offset: 4
+add $16, $16, 28 # Return scope to original position
 add $16, $17, $0 # Restore previous stack pointer
 jr $ra  # Return
-_L3:
+_L7:

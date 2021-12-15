@@ -4,7 +4,8 @@ int f(function func, int arg){
 
 int main(){
   function a(int x){
-    return x + 123;
+    a = 123;
+    return x + a;
   }
   return f(a, 2);
 }

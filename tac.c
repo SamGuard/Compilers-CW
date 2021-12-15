@@ -197,14 +197,14 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
         case 'D': {
             BasicBlock *funcBlock = allocBasicBlock();
             Tac *funcDefStart = allocTac(NULL), *funcStartLabel = allocLabel(),
-                *funcNewScope = allocTac(NULL),
+                *funcMoveScope = allocTac(NULL),
                 *funcResetScope = allocTac(NULL), *funcDefEnd = allocTac(NULL),
                 *funcEndLabel = allocLabel();
 
             funcDefStart->op = DEFINE_FUNC_START;
             // Function name
-            funcDefStart->dest = (TOKEN *)tree->left->right->left->left;            
-            if(strcmp("main", funcDefStart->dest->lexeme) == 0){
+            funcDefStart->dest = (TOKEN *)tree->left->right->left->left;
+            if (strcmp("main", funcDefStart->dest->lexeme) == 0) {
                 funcDefStart->dest->value = 0;
             } else {
                 functionCounter += 1;
@@ -218,7 +218,6 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
             // Used to skip the function if its being defined, not called
             funcDefStart->src2 = funcEndLabel->dest;
 
-            funcNewScope->op = NEW_SCOPE;
             funcResetScope->op = RETURN_SCOPE;
             funcDefEnd->op = DEFINE_FUNC_END;
 
@@ -226,17 +225,20 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
 
             appendTac(funcBlock, funcDefStart);
             appendTac(funcBlock, funcStartLabel);
+            // New scope if defined in global scope or move down and signal to
+            // create new chain of frames linked to the previous set
             if (functionDepth == 0) {
-                appendTac(funcBlock, funcNewScope);
+                funcMoveScope->op = NEW_SCOPE;
             } else {
-                moveScope(funcBlock, FALSE);
+                funcMoveScope->op = SCOPE_DOWN_FUNC;
             }
+            appendTac(funcBlock, funcMoveScope);
             functionDepth++;
             defineParams(tree->left->right->right, funcBlock, 0);
             moveToFrontBlock(&funcBlock);
             traverse(tree->right, funcBlock);
             moveToFrontBlock(&funcBlock);
-            if(funcBlock->tail->op != RETURN){
+            if (funcBlock->tail->op != RETURN) {
                 appendTac(funcBlock, funcResetScope);
             }
             functionDepth--;
@@ -635,6 +637,9 @@ void printTac(BasicBlock *block) {
                     } else {
                         printf("~ %s", t->dest->lexeme);
                     }
+                    break;
+                case SCOPE_DOWN_FUNC:
+                    printf("---SCOPE_DOWN_FUNC---");
                     break;
                 case SCOPE_DOWN:
                     printf("---SCOPE_DOWN---");

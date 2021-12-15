@@ -12,24 +12,25 @@
 
 #define SCOPE_UP 282
 #define SCOPE_DOWN 283
-#define NEW_SCOPE 284 // New scope that links to global scope
-#define RETURN_SCOPE 285 // When return is hit the scope needs to be reset
+#define SCOPE_DOWN_FUNC 284
+#define NEW_SCOPE 285 // New scope that links to global scope
+#define RETURN_SCOPE 286 // When return is hit the scope needs to be reset
 
 
-#define DEFINE_FUNC_START 286
-#define DEFINE_FUNC_END 287
+#define DEFINE_FUNC_START 287
+#define DEFINE_FUNC_END 288
 
-#define SAVE_RET_ADDR 288
-#define LOAD_RET_ADDR 289
+#define SAVE_RET_ADDR 289
+#define LOAD_RET_ADDR 290
 
-#define SAVE_RET_VAL 290
-#define LOAD_RET_VAL 291
+#define SAVE_RET_VAL 291
+#define LOAD_RET_VAL 292
 
-#define SAVE_MEM_POINT 292
-#define LOAD_MEM_POINT 293
+#define SAVE_MEM_POINT 293
+#define LOAD_MEM_POINT 294
 
-#define DEC_ARG 294
-#define DEF_PARAM 295
+#define DEC_ARG 295
+#define DEF_PARAM 296
 
 typedef struct Tac {
     int op;
