@@ -1,9 +1,9 @@
 #include "tac.h"
-#include "./machinecode.h"
+
+#include "./lexer_parser/C.tab.h"
 #include "./lexer_parser/nodes.h"
 #include "./lexer_parser/token.h"
-#include "./lexer_parser/C.tab.h"
-
+#include "./machinecode.h"
 
 #define VERBOSE
 
@@ -150,6 +150,7 @@ void declareArgs(NODE *tree, BasicBlock *block, int argNum) {
             declareArgs(tree->left, block, argNum + 1);
             moveToFrontBlock(&block);
             tree = tree->right;
+        // fall through
         default: {
             TOKEN *dest = (TOKEN *)malloc(sizeof(TOKEN));
             if (dest == NULL) perror("Could not allocate in declare args");
@@ -176,6 +177,7 @@ void defineParams(NODE *tree, BasicBlock *block, int argNum) {
             defineParams(tree->left, block, argNum + 1);
             moveToFrontBlock(&block);
             tree = tree->right;
+        // fall through
         case '~': {
             TOKEN *dest = (TOKEN *)malloc(sizeof(TOKEN));
             if (dest == NULL) perror("Could not allocate in declare args");
@@ -197,8 +199,9 @@ TOKEN *traverse(NODE *tree, BasicBlock *block) {
     switch (tree->type) {
         default:
             perror("unexpected type");
-        case 0:
             break;
+        case 0:
+            return NULL;
         case 'D': {
             BasicBlock *funcBlock = allocBasicBlock();
             Tac *funcDefStart = allocTac(NULL), *funcStartLabel = allocLabel(),
@@ -776,10 +779,10 @@ int main(int argc, char **argv) {
     NODE *tree;
     if (argc > 1 && strcmp(argv[1], "-d") == 0) yydebug = 1;
     init_symbtable();
-    //printf("--C COMPILER\n");
+    // printf("--C COMPILER\n");
     yyparse();
     tree = ans;
-    //printf("parse finished with %p\n", tree);
+    // printf("parse finished with %p\n", tree);
     print_tree(tree);
 
     BasicBlock *tacTree = toTac(tree);

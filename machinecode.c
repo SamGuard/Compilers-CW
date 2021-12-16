@@ -191,7 +191,6 @@ Number *getVarLocation(TOKEN *var, Frame *f) {
 }
 
 Frame *getFrameFromVar(TOKEN *var, Frame *f) {
-    int found = FALSE;
     Binding *b = f->b;
     while (b != NULL) {
         if (b->var == var) {
@@ -464,6 +463,7 @@ Block *traverseTac(BasicBlock *graph, Block *block) {
                         break;
                     }
                 }
+                // fall through
                 case RETURN: {
                     Number *sp = newNum(ADDR_REG, REG_SP, NULL),
                            *saveSP = newNum(ADDR_REG, REG_PSP, NULL);
@@ -941,7 +941,6 @@ void printInstructions(Block *code) {
 
 // Pritning goes here
 void outputCode(Block *code) {
-    unsigned int depth = 0;
     file = fopen("./outputs/out.asm", "w");
     fprintf(file, CODE_DATA);
     fprintf(file, CODE_START);

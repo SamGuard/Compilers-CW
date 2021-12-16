@@ -1,8 +1,8 @@
 #include "interpreter.h"
+
+#include "./lexer_parser/C.tab.h"
 #include "./lexer_parser/nodes.h"
 #include "./lexer_parser/token.h"
-#include "./lexer_parser/C.tab.h"
-
 
 Frame *globalFrame;
 int returning, breaking, isGlobalScope;
@@ -65,6 +65,7 @@ Value *allocValue(int type, int i, char *s, Closure *func) {
             return v;
         case FUNCTION:
             v->f = func;
+            return v;
     }
 }
 
@@ -79,7 +80,9 @@ Value *copyValue(Value *v) {
 Value *tokenToVal(TOKEN *t) {
     if (t->type == CONSTANT) {
         Value *v = allocValue(INT, t->value, NULL, NULL);
+        return v;
     }
+    return NULL;
 }
 
 Binding *findBinding(TOKEN *ident, Frame *f) {
@@ -143,7 +146,7 @@ Value *retrieve(TOKEN *ident, Frame *f) {
 // Takes pointer to the top of the AST containing params
 // And a pointer to the new frame of vars
 void applyArgsToParams(NODE *args, NODE *params, Frame *oldF, Frame *newF) {
-    if(args == NULL){
+    if (args == NULL) {
         return;
     }
     switch (params->type) {
@@ -153,9 +156,9 @@ void applyArgsToParams(NODE *args, NODE *params, Frame *oldF, Frame *newF) {
             return;
         case ',':
             applyArgsToParams(args->left, params->left, oldF, newF);
-            // applyArgsToParams(args->right, params->right, oldF, newF);
             args = args->right;
             params = params->right;
+        // fall through
         case '~':;
             declare((TOKEN *)params->right->left, traverse(args, oldF), newF);
     }
@@ -167,6 +170,7 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
     switch (symbol) {
         default:
             perror("Invalid symbol");
+            return NULL;
         case '+':
             z->i = x->i + y->i;
             break;
@@ -196,8 +200,9 @@ Value *arithmetic(Value *x, Value *y, char symbol) {
 Value *logic(Value *x, Value *y, int symbol) {
     Value *z = allocValue(INT, FALSE, NULL, NULL);
     switch (symbol) {
-    defualt:
-        perror("Invalid logical operation");
+        default:
+            perror("Invalid logical operation");
+            return NULL;
         case '=':
             if (x->i == y->i) {
                 z->i = TRUE;
@@ -217,6 +222,7 @@ Value *logic(Value *x, Value *y, int symbol) {
             if (x->i >= y->i) {
                 z->i = TRUE;
             }
+            break;
         case '<':
             if (x->i < y->i) {
                 z->i = TRUE;
@@ -234,18 +240,17 @@ Value *logic(Value *x, Value *y, int symbol) {
     return z;
 }
 
-Value *builtInFunc(NODE *tree, Frame *f){
-    char *funcName = ((TOKEN*)tree->left->left)->lexeme;
-    if(strcmp(funcName, (char*)"readInt") == 0){
-        NODE* currentNode = tree->right;
-        while(currentNode != NULL){
-            if(currentNode->type == ','){
-
+Value *builtInFunc(NODE *tree, Frame *f) {
+    char *funcName = ((TOKEN *)tree->left->left)->lexeme;
+    if (strcmp(funcName, (char *)"readInt") == 0) {
+        NODE *currentNode = tree->right;
+        while (currentNode != NULL) {
+            if (currentNode->type == ',') {
             }
         }
     }
 
-    return NULL;    
+    return NULL;
 }
 
 Value *traverse(NODE *tree, Frame *f) {
@@ -253,6 +258,7 @@ Value *traverse(NODE *tree, Frame *f) {
     switch (tree->type) {
         default:
             perror("unexpected type");
+            return NULL;
         case 0:
             return arithmetic(traverse(tree->left, f), NULL, 'N');
         case 'D': {
@@ -271,10 +277,8 @@ Value *traverse(NODE *tree, Frame *f) {
                 if (returning || breaking) return lResult;
                 rResult = traverse(tree->right, f);
                 if (tree->left != NULL && tree->left->type == RETURN) {
-                    free(rResult);
                     return lResult;
                 }
-                free(lResult);
                 return rResult;
             } else {
                 return traverse(tree->left, f);
@@ -283,14 +287,14 @@ Value *traverse(NODE *tree, Frame *f) {
             if (tree->left->type == LEAF) {
                 if (tree->right->type == '=') {
                     declare((TOKEN *)tree->right->left->left, NULL, f);
-                    free(traverse(tree->right, f));
+                    traverse(tree->right, f);
                 } else {
                     declare((TOKEN *)tree->right->left, NULL, f);
                 }
                 return NULL;
             } else {
-                free(traverse(tree->left, f));
-                free(traverse(tree->right, f));
+                traverse(tree->left, f);
+                traverse(tree->right, f);
                 return NULL;
             }
         case '=':
@@ -333,17 +337,14 @@ Value *traverse(NODE *tree, Frame *f) {
         case IF: {
             Value *res = traverse(tree->left, f);
             if (res->i == FALSE) {
-                free(res);
                 if (tree->right->type == ELSE) {
                     Frame *newFrame = allocFrame(f);
                     Value *res = traverse(tree->right->right, newFrame);
-                    //freeFrame(newFrame);
                     f->next = NULL;
                     return res;
                 }
                 return NULL;
             } else {
-                free(res);
                 Frame *newFrame = allocFrame(f);
                 Value *res;
                 if (tree->right->type == ELSE) {
@@ -351,7 +352,6 @@ Value *traverse(NODE *tree, Frame *f) {
                 } else {
                     res = traverse(tree->right, newFrame);
                 }
-                //freeFrame(newFrame);
                 f->next = NULL;
                 return res;
             }
@@ -365,16 +365,12 @@ Value *traverse(NODE *tree, Frame *f) {
                 free(condition);
                 res = traverse(tree->right, newFrame);
                 if (breaking || returning) {
-                    //freeFrame(newFrame);
                     breaking = FALSE;
                     return res;
                 }
-                //freeFrame(newFrame);
-                free(res);
                 newFrame = allocFrame(f);
             }
             free(condition);
-            //freeFrame(newFrame);
             return NULL;
         }
 
@@ -386,6 +382,7 @@ Value *traverse(NODE *tree, Frame *f) {
                 return copyValue(retrieve(t, f));
             } else {
                 perror("Invalid type in leaf");
+                return NULL;
             }
         }
         case APPLY: {
@@ -400,7 +397,7 @@ Value *traverse(NODE *tree, Frame *f) {
                 Value *v = traverse(func->f->right, newFrame);
                 returning = FALSE;
                 breaking = FALSE;
-                //freeFrame(newFrame);
+                // freeFrame(newFrame);
                 return v;
             } else {
                 return bValue;
@@ -431,50 +428,6 @@ void simplePrintTree(NODE *tree) {
     printf("type: %c  \n", head->type);
     interpreter(head->left);
     interpreter(head->right);
-}
-
-void printFrame(Frame *f) {
-    while (f != NULL) {
-        Binding *b = f->b;
-        while (b != NULL) {
-            if (b->name != NULL)
-                printf("%d %s = %d, ", b->name->type, b->name->lexeme,
-                       b->value != NULL ? b->value->i : 0);
-            b = b->next;
-        }
-        f = f->next;
-    }
-}
-
-Value *callMain(NODE *tree, Frame *f) {
-    Frame *newFrame = allocFrame(f);
-    Value *v = traverse(tree->right, newFrame);
-    printFrame(newFrame);
-    //freeFrame(newFrame);
-    return v;
-}
-
-Closure *findMain(Frame *f) {
-    Binding *b = f->b;
-    while (b != NULL) {
-        if (b->name != NULL && strcmp(b->name->lexeme, "main") == 0) {
-            return b->value->f;
-        }
-        b = b->next;
-    }
-}
-
-int interpreter(NODE *tree) {
-    globalFrame = allocFrame(NULL);
-    globalFrame->b = (Binding *)malloc(sizeof(Binding));
-    globalFrame->next = NULL;
-    returning = 0;
-    breaking = 0;
-    traverse(tree, globalFrame);
-    int result = callMain(findMain(globalFrame)->f, globalFrame)->i;
-    printf("Program exited with code: %d\n", result);
-    freeFrame(globalFrame);
-    return result;
 }
 
 char *named(int t) {
@@ -527,6 +480,52 @@ char *named(int t) {
     }
 }
 
+void printFrame(Frame *f) {
+    while (f != NULL) {
+        Binding *b = f->b;
+        while (b != NULL) {
+            if (b->name != NULL)
+                printf("%s %s = %d, ", named(b->name->type), b->name->lexeme,
+                       b->value != NULL ? b->value->i : 0);
+            b = b->next;
+        }
+        f = f->next;
+    }
+}
+
+Value *callMain(NODE *tree, Frame *f) {
+    Frame *newFrame = allocFrame(f);
+    Value *v = traverse(tree->right, newFrame);
+    printFrame(newFrame);
+    // freeFrame(newFrame);
+    return v;
+}
+
+Closure *findMain(Frame *f) {
+    Binding *b = f->b;
+    while (b != NULL) {
+        if (b->name != NULL && strcmp(b->name->lexeme, "main") == 0) {
+            return b->value->f;
+        }
+        b = b->next;
+    }
+    perror("main not found");
+    return NULL;
+}
+
+int interpreter(NODE *tree) {
+    globalFrame = allocFrame(NULL);
+    globalFrame->b = (Binding *)malloc(sizeof(Binding));
+    globalFrame->next = NULL;
+    returning = 0;
+    breaking = 0;
+    traverse(tree, globalFrame);
+    int result = callMain(findMain(globalFrame)->f, globalFrame)->i;
+    printf("\nProgram exited with code: %d\n", result);
+    freeFrame(globalFrame);
+    return result;
+}
+
 void print_leaf(NODE *tree, int level) {
     TOKEN *t = (TOKEN *)tree;
     int i;
@@ -568,10 +567,10 @@ int main(int argc, char **argv) {
     NODE *tree;
     if (argc > 1 && strcmp(argv[1], "-d") == 0) yydebug = 1;
     init_symbtable();
-    //printf("--C COMPILER\n");
+    // printf("--C COMPILER\n");
     yyparse();
     tree = ans;
-    //printf("parse finished with %p\n", tree);
+    // printf("parse finished with %p\n", tree);
     print_tree(tree);
 
     interpreter(tree);
