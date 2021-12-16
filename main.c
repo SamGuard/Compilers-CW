@@ -5,15 +5,9 @@
 #include "./lexer_parser/C.tab.h"
 #include "./lexer_parser/nodes.h"
 
-#define IS_INTERPRETER 0
-
-#if (IS_INTERPRETER == 1)
 #include "interpreter.h"
-#endif
-#if (IS_INTERPRETER == 0)
 #include "machinecode.h"
 #include "tac.h"
-#endif
 
 char *named(int t) {
     static char b[100];
@@ -102,7 +96,7 @@ extern NODE *yyparse(void);
 extern NODE *ans;
 extern void init_symbtable(void);
 
-int main(int argc, char **argv) {
+int old_main(int argc, char **argv) {
     NODE *tree;
     if (argc > 1 && strcmp(argv[1], "-d") == 0) yydebug = 1;
     init_symbtable();
@@ -112,11 +106,10 @@ int main(int argc, char **argv) {
     //printf("parse finished with %p\n", tree);
     print_tree(tree);
 
-#if (IS_INTERPRETER == 1)
     interpreter(tree);
-#else
+
     BasicBlock *tacTree = toTac(tree);
     toMachineCode(tacTree);
-#endif
+
     return 0;
 }

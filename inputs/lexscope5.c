@@ -11,7 +11,7 @@ int getFuncFunc(int x) {
     } else {
         function getFunc2(){
           int b = 1;
-            int f() { return a - b; }
+            int g() { return a - b; }
             return g;
         }
         f = getFunc2;

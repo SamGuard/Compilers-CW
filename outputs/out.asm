@@ -14,10 +14,10 @@ sw $t1, 4($t0)
 la $t1, getFunc
 sw $t1, 8($t0)
 la $t1, f
-sw $t1, 20($t0)
+sw $t1, 12($t0)
 la $t1, getFunc2
 sw $t1, 16($t0)
-la $t1, f
+la $t1, g
 sw $t1, 20($t0)
 la $8, closures # Load closure space address
 add $8, $8, $18
@@ -77,7 +77,7 @@ add $8, $0, 2
 sw $8, 4($16) # Set b
 la $8, closures # Load closure space address
 add $8, $8, $18
-add $9, $0, 20 # Put offset into register
+add $9, $0, 12 # Put offset into register
 sw $9, 0($8) # Set offset for closure
 sw $16, 16($8) # Set stack pointer for closure
 sw $18, 8($16) # Set func f definition
@@ -126,10 +126,10 @@ add $8, $8, $18
 add $9, $0, 20 # Put offset into register
 sw $9, 0($8) # Set offset for closure
 sw $16, 16($8) # Set stack pointer for closure
-sw $18, 8($16) # Set func f definition
+sw $18, 8($16) # Set func g definition
 add $18, 8 # Increment closure counter
 j _L11 # Skip function as this is the definiton
-f:
+g:
 add $16, $16, -8 # Move scope down
 sw $30, 0($16) # Save previous chain location into memory
 add $19, $30, $0# Move previous chain location into FPS register
@@ -143,7 +143,7 @@ add $16, $16, 8 # Return scope to original position
 add $16, $17, $0 # Restore previous stack pointer
 jr $ra  # Return
 _L11:
-lw $2, 0 # getArg: g, memory offset: 0
+lw $2, 8($16) # getArg: g, memory offset: 2
 add $16, $16, 12 # Return scope to original position
 add $16, $17, $0 # Restore previous stack pointer
 jr $ra  # Return

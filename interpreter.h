@@ -1,6 +1,14 @@
 #ifndef INTERPRETER_H
 #define INTERPRETER_H
-#include "./traverseStructures.h"
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "./lexer_parser/nodes.h"
+#include "./lexer_parser/token.h"
+#include "./lexer_parser/C.tab.h"
+
 
 typedef struct Closure Closure;
 typedef struct Frame Frame;

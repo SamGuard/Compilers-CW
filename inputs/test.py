@@ -5,7 +5,7 @@ import re
 #BINARY_PATH = "bin/mycc"
 interpreter = "./bin/interpreter"
 machine = "./bin/MachineCode"
-runShell = "./inputs/test.sh"
+runShell = "./run.sh"
 files = [   
             ["operators.c", "1"],
             ["basic1.c", "0"],
@@ -53,7 +53,7 @@ class TestInterpreter:
     def interpreter_test_helper(self, fileName: str, input_code: str, output_regex: str):
         print(f"Testing {fileName}: ")
         process = subprocess.Popen(
-            [runShell, fileName], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            [runShell, "0", fileName], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, err = process.communicate(input=bytes(input_code, "utf-8'"))
 
         message = f"Failure messages in {fileName}\nStderr: \n{err.decode('utf-8')}\n"

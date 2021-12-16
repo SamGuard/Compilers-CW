@@ -2,9 +2,11 @@
 #define MACHINECODE_H
 #include <stdio.h>
 #include <stdlib.h>
-
 #include "./tac.h"
-#include "./traverseStructures.h"
+#include "./lexer_parser/nodes.h"
+#include "./lexer_parser/token.h"
+#include "./lexer_parser/C.tab.h"
+
 
 #define WORD_SIZE 4  // Word size in bytes
 
