@@ -5,7 +5,7 @@
 #include "./lexer_parser/token.h"
 
 Frame *globalFrame;
-int returning, breaking, isGlobalScope;
+int returning, breaking;
 
 TOKEN *allocToken(Value *value, int type, TOKEN *next) {
     TOKEN *x = (TOKEN *)malloc(sizeof(TOKEN));
@@ -264,7 +264,7 @@ Value *traverse(NODE *tree, Frame *f) {
         case 'D': {
             Closure *c = (Closure *)malloc(sizeof(Closure));
             c->f = tree;
-            c->prev = (isGlobalScope ? globalFrame : f);
+            c->prev = f;
             Value *v = allocValue(FUNCTION, 0, NULL, c);
             declare((TOKEN *)tree->left->right->left->left, v, f);
             return NULL;
@@ -340,7 +340,6 @@ Value *traverse(NODE *tree, Frame *f) {
                 if (tree->right->type == ELSE) {
                     Frame *newFrame = allocFrame(f);
                     Value *res = traverse(tree->right->right, newFrame);
-                    f->next = NULL;
                     return res;
                 }
                 return NULL;
@@ -352,7 +351,6 @@ Value *traverse(NODE *tree, Frame *f) {
                 } else {
                     res = traverse(tree->right, newFrame);
                 }
-                f->next = NULL;
                 return res;
             }
         }
