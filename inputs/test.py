@@ -4,10 +4,10 @@ import re
 
 #BINARY_PATH = "bin/mycc"
 interpreter = "./bin/interpreter"
-machine = "./bin/MachineCode"
+machine = "./bin/toAssembly"
 runShell = "./run.sh"
 files = [   
-            ["operators.c", "1"],
+            ["operators.c", "0"],
             ["basic1.c", "0"],
             ["basic2.c", "5"],
             ["basic3.c", "4"],
@@ -23,7 +23,6 @@ files = [
             ["functions6.c", "2"],
             ["HCF.c", "4"],
             ["loop1.c", "1"],
-            #["loop2.c", "20"],
             ["loop3.c", "2001"],
             ["slp1.c", "0"],
             ["lexscope1.c", "126"],
@@ -33,12 +32,12 @@ files = [
             ["lexscope5.c", "3"]
         ]
 
-class TestInterpreter:
+class Tester:
 
-    def test_interpreter_return(self):
+    def test_return(self):
         code = "int main() {return 1;}"
         result = "1"
-        self.interpreter_test_helper(code, result)
+        self.test_helper(code, result)
 
     def testAll(self):
         
@@ -48,12 +47,13 @@ class TestInterpreter:
             f = file.read()
             file.close()
 
-            self.interpreter_test_helper(fileName[0], f, fileName[1])
+            self.test_helper(fileName[0], f, fileName[1], "0")
+            self.test_helper(fileName[0], f, fileName[1], "1")
 
-    def interpreter_test_helper(self, fileName: str, input_code: str, output_regex: str):
+    def test_helper(self, fileName: str, input_code: str, output_regex: str, mode: str):
         print(f"Testing {fileName}: ")
         process = subprocess.Popen(
-            [runShell, "0", fileName], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            [runShell, mode, fileName], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         output, err = process.communicate(input=bytes(input_code, "utf-8'"))
 
         message = f"Failure messages in {fileName}\nStderr: \n{err.decode('utf-8')}\n"
@@ -76,4 +76,4 @@ class TestInterpreter:
         print("------------------")
 
 if __name__ == '__main__':
-    TestInterpreter().testAll()
+    Tester().testAll()
