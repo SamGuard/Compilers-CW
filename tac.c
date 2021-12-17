@@ -3,7 +3,7 @@
 #include "./lexer_parser/C.tab.h"
 #include "./lexer_parser/nodes.h"
 #include "./lexer_parser/token.h"
-#include "./machinecode.h"
+#include "./toAssembly.h"
 
 #define VERBOSE
 
@@ -786,7 +786,7 @@ int main(int argc, char **argv) {
     print_tree(tree);
 
     BasicBlock *tacTree = toTac(tree);
-    toMachineCode(tacTree);
+    toAssembly(tacTree);
 
     return 0;
 }

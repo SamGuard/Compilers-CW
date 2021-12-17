@@ -1,7 +1,7 @@
 #!/usr/bin/bash
-MC="MachineCode";
+AS="toAssembly";
 IN="Interpreter"
-rm ./bin/$MS
+rm ./bin/$AS
 rm ./bin/$IN
-gcc tac.c machinecode.c ./lexer_parser/*.c -g -o ./bin/$MC -Wall -Wextra
+gcc tac.c toAssembly.c ./lexer_parser/*.c -g -o ./bin/$AS -Wall -Wextra
 gcc interpreter.c ./lexer_parser/*.c -g -o ./bin/$IN -Wall -Wextra

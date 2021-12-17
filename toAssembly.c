@@ -1,4 +1,4 @@
-#include "machinecode.h"
+#include "toAssembly.h"
 #include "./lexer_parser/nodes.h"
 #include "./lexer_parser/token.h"
 #include "./lexer_parser/C.tab.h"
@@ -87,7 +87,6 @@ Block *allocBlock() {
 
     block->frame = allocFrame();
     block->head = block->tail = NULL;
-    block->memSize = 0;
     block->next = NULL;
     return block;
 }
@@ -961,7 +960,7 @@ void outputCode(Block *code) {
 
 // ------------------------------PRINTING-------------------
 
-void toMachineCode(BasicBlock *tree) {
+void toAssembly(BasicBlock *tree) {
     // Define constant registers
     zero = newNum(ADDR_REG, 0, NULL);
     sp = newNum(ADDR_REG, REG_SP, NULL);
@@ -973,7 +972,7 @@ void toMachineCode(BasicBlock *tree) {
     // Define constant variable names
     prevChainLoc = (TOKEN *)malloc(sizeof(TOKEN));
     if (prevChainLoc == NULL) {
-        printf("could not allocate token in toMachineCode\n");
+        printf("could not allocate token in toAssembly\n");
     }
     CODE_FUNC_DEF = (char *)malloc(4096 * sizeof(char));
     CODE_FUNC_DEF[0] = '\0';

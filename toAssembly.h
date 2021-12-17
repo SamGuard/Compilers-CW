@@ -1,5 +1,5 @@
-#ifndef MACHINECODE_H
-#define MACHINECODE_H
+#ifndef TOASSEMBLY_H
+#define TOASSEMBLY_H
 #include <stdio.h>
 #include <stdlib.h>
 #include "./tac.h"
@@ -20,6 +20,7 @@
 #define INS_SUB '-'
 #define INS_LET '<'
 #define INS_MUL '*'
+#define INS_MOD '%'
 
 // Branching
 #define INS_BZE 515  // Branch if 0
@@ -100,14 +101,13 @@ typedef struct Instruction {
 } Inst;
 
 typedef struct Block {
-    unsigned int memSize;
     Inst *head, *tail;
     Frame *frame;
-    struct Block *next, *prev;
+    struct Block *next;
 } Block;
 
 void outputCode(Block *code);
-void toMachineCode(BasicBlock *tree);
+void toAssembly(BasicBlock *tree);
 void setRegister(TOKEN *src, Block *b, Number *destReg);
 void getArg(TOKEN *src, Block *b, Number *reg);
 #endif

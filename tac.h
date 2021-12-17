@@ -16,7 +16,7 @@
 
 #define SCOPE_UP 282
 #define SCOPE_DOWN 283
-#define SCOPE_DOWN_FUNC 284
+#define SCOPE_DOWN_FUNC 284 // Move scope down and mark that its a new chain
 #define NEW_SCOPE 285 // New scope that links to global scope
 #define RETURN_SCOPE 286 // When return is hit the scope needs to be reset
 
